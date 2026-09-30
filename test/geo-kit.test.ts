@@ -2,7 +2,6 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import test from "node:test";
 import {
-  GeographyError,
   isISODate,
   loadGeographyResources,
   makeGeometryRef,
