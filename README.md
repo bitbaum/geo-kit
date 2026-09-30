@@ -7,10 +7,10 @@ choices, personal data, HTTP server, or rendering framework.
 ## Install
 
 The Git repository is the install source until npm publishing is bootstrapped.
-After the first tagged release, consumers can pin the immutable tag:
+Pin the reviewed v0.1.1 source commit for a reproducible install:
 
 ```sh
-pnpm add github:bitbaum/geo-kit#v0.1.1
+pnpm add github:bitbaum/geo-kit#a337aec928cf7804fecf459c308d366b90f4b2fa
 ```
 
 The npm workflow uses npm Trusted Publishing and provenance. The first npm
