@@ -1,12 +1,12 @@
 import type {
   AreaAssertionKind,
-  GeographyResource,
   ISODate,
   Position,
   ManifestValidationOptions,
   ResourceFormat,
 } from "./types.ts";
 import { GEOGRAPHY_MANIFEST_VERSION } from "./types.ts";
+import { isWgs84Bounds } from "./spatial.ts";
 
 const keyPattern = /^[a-z0-9][a-z0-9._:-]{0,127}$/i;
 const shaPattern = /^[a-f0-9]{64}$/i;
@@ -56,7 +56,7 @@ export function validUrl(value: unknown, protocols: readonly string[]): value is
   }
 }
 
-function safeResourceHref(value: unknown): value is string {
+export function safeResourceHref(value: unknown): value is string {
   if (
     typeof value !== "string" ||
     !value.startsWith("/") ||
@@ -64,22 +64,20 @@ function safeResourceHref(value: unknown): value is string {
     value.includes("\\") ||
     value.includes("?") ||
     value.includes("#")
+    || /[\u0000-\u0020\u007f]/.test(value)
   ) {
     return false;
   }
   try {
     const decoded = decodeURIComponent(value);
-    return !decoded.split("/").some((segment) => segment === "." || segment === "..");
+    return !decoded.startsWith("//") && !decoded.includes("\\") &&
+      !/[\u0000-\u001f\u007f]/.test(decoded) &&
+      !decoded.split("/").some((segment) => segment === "." || segment === "..");
   } catch {
     return false;
   }
 }
 
-function validBounds(value: unknown): value is GeographyResource["bbox"] {
-  if (!Array.isArray(value) || value.length !== 4 || !value.every(Number.isFinite)) return false;
-  const [west, south, east, north] = value as number[];
-  return west! >= -180 && east! <= 180 && west! <= east! && south! >= -90 && north! <= 90 && south! <= north!;
-}
 /** Validate a manifest without fetching anything. Licenses and their legal policy are supplied by the owner. */
 export function validateGeographyManifest(
   value: unknown,
@@ -216,7 +214,7 @@ export function validateGeographyManifest(
         problems.push(`${where}.sourceIds do not include the sources listed for viewpoint ${raw.viewpointKey}`);
       }
     }
-    if (raw.bbox !== undefined && !validBounds(raw.bbox)) problems.push(`${where}.bbox is invalid`);
+    if (raw.bbox !== undefined && !isWgs84Bounds(raw.bbox)) problems.push(`${where}.bbox is invalid`);
     for (const field of ["minZoom", "maxZoom"] as const) {
       if (raw[field] !== undefined && (!Number.isFinite(raw[field]) || Number(raw[field]) < 0 || Number(raw[field]) > 30)) {
         problems.push(`${where}.${field} must be between 0 and 30`);

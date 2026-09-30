@@ -1,4 +1,6 @@
 import { GeographyError } from "./errors.js";
+import { fetchGeographyBytes, publicDataUrl } from "./http.js";
+import { intersectsGeographyBounds, isWgs84Bounds } from "./spatial.js";
 import { isISODate, isPlainObject, periodContains, validateGeographyManifest, validateGeometry } from "./validation.js";
 export function selectGeographyResources(manifest, request) {
     const manifestProblems = validateGeographyManifest(manifest);
@@ -7,6 +9,9 @@ export function selectGeographyResources(manifest, request) {
     }
     if (!isISODate(request.asOf))
         throw new GeographyError("invalid_manifest", "asOf must be a real ISO date");
+    if (request.bbox !== undefined && !isWgs84Bounds(request.bbox)) {
+        throw new GeographyError("invalid_manifest", "bbox must contain WGS84 bounds in west/south/east/north order");
+    }
     const geographyIds = new Set(request.geographyIds ?? []);
     const resourceIds = new Set(request.resourceIds ?? []);
     if (geographyIds.size === 0 && resourceIds.size === 0) {
@@ -25,6 +30,8 @@ export function selectGeographyResources(manifest, request) {
         if (kindKeys && !kindKeys.has(resource.kindKey))
             return false;
         if (levelKeys && !levelKeys.has(resource.levelKey))
+            return false;
+        if (request.bbox && resource.bbox && !intersectsGeographyBounds(request.bbox, resource.bbox))
             return false;
         if (!periodContains(resource.validFrom, resource.validTo, request.asOf))
             return false;
@@ -216,6 +223,7 @@ export async function sha256Hex(bytes) {
 }
 /** Fetches selected public data without cookies; data resources may not redirect off-origin. */
 export async function loadGeographyResources(manifest, request, options) {
+    options.signal?.throwIfAborted();
     const problems = validateGeographyManifest(manifest, { licensePolicy: options.licensePolicy });
     if (problems.length)
         throw new GeographyError("invalid_manifest", problems.slice(0, 8).join("; "));
@@ -224,58 +232,26 @@ export async function loadGeographyResources(manifest, request, options) {
     if (!Number.isSafeInteger(maxConcurrent) || maxConcurrent < 1 || maxConcurrent > 16) {
         throw new GeographyError("invalid_manifest", "maxConcurrent must be between 1 and 16");
     }
-    let base;
-    try {
-        base = new URL(options.baseUrl);
-        if ((base.protocol !== "https:" && base.protocol !== "http:") || base.username || base.password) {
-            throw new Error("invalid base URL");
-        }
-    }
-    catch {
-        throw new GeographyError("invalid_manifest", "baseUrl must be an HTTP(S) URL");
-    }
-    const fetcher = options.fetcher ?? fetch;
+    publicDataUrl("/", options.baseUrl);
     const results = new Array(selected.length);
     let cursor = 0;
     const worker = async () => {
         while (true) {
+            options.signal?.throwIfAborted();
             const index = cursor++;
             if (index >= selected.length)
                 return;
             const resource = selected[index];
             let bytes = await options.cache?.get(resource.sha256) ?? null;
+            options.signal?.throwIfAborted();
             const fromCache = bytes !== null;
             if (bytes)
                 bytes = bytes.slice();
             if (!bytes) {
-                const url = new URL(resource.href, base);
-                if (url.origin !== base.origin)
-                    throw new GeographyError("invalid_manifest", `resource ${resource.id} is not same-origin`);
-                let response;
-                try {
-                    response = await fetcher(url, {
-                        method: "GET",
-                        credentials: "omit",
-                        redirect: "error",
-                        signal: options.signal,
-                        headers: { accept: "application/geo+json, application/json" },
-                    });
-                }
-                catch (error) {
-                    if (options.signal?.aborted)
-                        throw error;
-                    throw new GeographyError("resource_fetch_failed", `resource ${resource.id} could not be fetched`);
-                }
-                if (!response.ok)
-                    throw new GeographyError("resource_fetch_failed", `resource ${resource.id} returned HTTP ${response.status}`);
-                const contentLength = response.headers.get("content-length");
-                const contentEncoding = response.headers.get("content-encoding");
-                if ((!contentEncoding || contentEncoding === "identity") && contentLength && /^\d+$/.test(contentLength) && Number(contentLength) > resource.byteSize) {
-                    throw new GeographyError("resource_too_large", `resource ${resource.id} exceeded its declared size`);
-                }
-                bytes = await readBoundedBody(response, resource.byteSize, resource.id, options.signal);
+                bytes = await fetchGeographyBytes(resource.href, resource.byteSize, options, `resource ${resource.id}`);
             }
             const data = await verifyGeographyResource(resource, bytes);
+            options.signal?.throwIfAborted();
             if (!fromCache)
                 await options.cache?.put(resource.sha256, bytes.slice());
             results[index] = { resource, data, bytes };
@@ -283,45 +259,6 @@ export async function loadGeographyResources(manifest, request, options) {
     };
     await Promise.all(Array.from({ length: Math.min(maxConcurrent, selected.length) }, () => worker()));
     return results;
-}
-async function readBoundedBody(response, maxBytes, resourceId, signal) {
-    const reader = response.body?.getReader();
-    if (!reader)
-        throw new GeographyError("resource_fetch_failed", `resource ${resourceId} has no response body`);
-    const chunks = [];
-    let size = 0;
-    try {
-        while (true) {
-            const { done, value } = await reader.read();
-            if (done)
-                break;
-            if (!value)
-                continue;
-            size += value.byteLength;
-            if (size > maxBytes) {
-                await reader.cancel("declared resource size exceeded").catch(() => undefined);
-                throw new GeographyError("resource_too_large", `resource ${resourceId} exceeded its declared size`);
-            }
-            chunks.push(value);
-        }
-    }
-    catch (error) {
-        if (signal?.aborted)
-            throw signal.reason ?? error;
-        if (error instanceof GeographyError)
-            throw error;
-        throw new GeographyError("resource_fetch_failed", `resource ${resourceId} body could not be read`);
-    }
-    finally {
-        reader.releaseLock();
-    }
-    const bytes = new Uint8Array(size);
-    let offset = 0;
-    for (const chunk of chunks) {
-        bytes.set(chunk, offset);
-        offset += chunk.byteLength;
-    }
-    return bytes;
 }
 /** Build an opaque, versioned geometry reference suitable for Solon's `areas.geometry_ref`. */
 export function makeGeometryRef(input) {

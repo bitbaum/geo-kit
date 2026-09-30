@@ -10,7 +10,7 @@ The Git repository is the install source until npm publishing is bootstrapped.
 After the first tagged release, consumers can pin the immutable tag:
 
 ```sh
-pnpm add github:bitbaum/geo-kit#v0.1.0
+pnpm add github:bitbaum/geo-kit#v0.1.1
 ```
 
 The npm workflow uses npm Trusted Publishing and provenance. The first npm
@@ -46,7 +46,41 @@ and without following redirects. It checks the decoded file size, SHA-256,
 GeoJSON/TopoJSON structure and feature count before returning parsed data. It
 accepts an injected cache, fetch implementation and abort signal so each app can
 use its own HTTP cache, IndexedDB policy and retry interface. Requests are
-bounded-concurrency and results retain manifest order.
+bounded-concurrency and results use deterministic geography/kind/level/id order.
+
+`loadGeographyManifest` uses the same transport protections for the manifest,
+including a decoded byte limit enforced while streaming (64 KiB by default).
+An abort cancels a stalled body and also stops loads served from a cache.
+
+Resource selection can include a WGS84 `bbox` in west/south/east/north order.
+Only intersecting resources with known bounds are selected. Resources without
+bounds remain eligible, so missing metadata cannot silently hide coverage.
+West greater than east represents an antimeridian crossing. Geographic, time,
+viewpoint and download-budget selectors continue to apply together.
+
+```ts
+import { loadGeographyManifest, loadGeographyResources } from '@bitbaum/geo-kit';
+
+const controller = new AbortController();
+const options = {
+  baseUrl: window.location.origin,
+  licensePolicy: [{ spdx: 'CC0-1.0', requiresAttribution: false }],
+  signal: controller.signal, // AbortController owned by the application
+};
+const manifest = await loadGeographyManifest('/geography/manifest.json', options);
+const layers = await loadGeographyResources(manifest, {
+  geographyIds: ['selected-geography'],
+  asOf: '2026-09-30', // the date displayed by the application
+  levelKeys: ['subdivision'],
+  bbox: [7, 46, 9, 48],
+  maxBytes: 512 * 1024,
+}, options);
+```
+
+Layer keys and geographic IDs in this example come from the application's
+data. Country packs, detailed subdivision datasets and a border drawing UI are
+separate deliverables owned by the applications; this package does not invent
+or publish them.
 
 The library never reads the system clock. Pass the date displayed by the app to
 support historical maps deterministically. An explicit viewpoint is opt-in;

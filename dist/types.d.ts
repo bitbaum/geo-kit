@@ -35,6 +35,8 @@ export type GeoJSONGeometry = BoundaryGeometry | {
 };
 export type ResourceFormat = "geojson" | "topojson";
 export type ISODate = string;
+/** West > east represents a box crossing the antimeridian. */
+export type GeographyBounds = readonly [west: number, south: number, east: number, north: number];
 export interface GeographySource {
     id: string;
     publisher: string;
@@ -65,7 +67,7 @@ export interface GeographyResource {
     validTo: ISODate | null;
     /** Null means viewpoint-neutral source geometry. */
     viewpointKey: string | null;
-    bbox?: readonly [west: number, south: number, east: number, north: number];
+    bbox?: GeographyBounds;
     minZoom?: number;
     /** Exclusive upper bound; null means no known maximum. */
     maxZoom?: number;
@@ -106,6 +108,8 @@ export interface ResourceSelection {
     /** Default selects only neutral geometry; an explicit key adds that viewpoint. `all` is opt-in. */
     viewpointKey?: string | "all";
     zoom?: number;
+    /** Only intersecting resources; resources without bounds remain eligible. */
+    bbox?: GeographyBounds;
     maxBytes?: number;
     maxResources?: number;
 }
@@ -148,6 +152,13 @@ export interface LoadResourcesOptions {
     cache?: ResourceCache;
     licensePolicy?: readonly LicenseRule[];
     fetcher?: typeof fetch;
+}
+export interface LoadManifestOptions extends ManifestValidationOptions {
+    baseUrl: string;
+    signal?: AbortSignal;
+    fetcher?: typeof fetch;
+    /** Limit on decoded manifest bytes, enforced while streaming. Default: 64 KiB. */
+    maxBytes?: number;
 }
 export type AreaAssertionKind = "claims" | "administers" | "proposes";
 /** Mirrors Solon's public `area_assertions` contract; it reports claims, not truth. */

@@ -4,6 +4,7 @@ export declare function isISODate(value: unknown): value is ISODate;
 export declare function isPlainObject(value: unknown): value is Record<string, unknown>;
 export declare function validPeriod(from: unknown, to: unknown): boolean;
 export declare function validUrl(value: unknown, protocols: readonly string[]): value is string;
+export declare function safeResourceHref(value: unknown): value is string;
 /** Validate a manifest without fetching anything. Licenses and their legal policy are supplied by the owner. */
 export declare function validateGeographyManifest(value: unknown, options?: ManifestValidationOptions): string[];
 export declare function periodContains(from: ISODate | null, to: ISODate | null, date: ISODate): boolean;
