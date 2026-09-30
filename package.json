@@ -1,6 +1,6 @@
 {
   "name": "@bitbaum/geo-kit",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Versioned, on-demand geography resources and sourced boundary assertions for web applications.",
   "author": "BitBaum",
   "homepage": "https://github.com/bitbaum/geo-kit#readme",
