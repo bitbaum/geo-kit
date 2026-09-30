@@ -1,0 +1,41 @@
+{
+  "name": "@bitbaum/geo-kit",
+  "version": "0.1.0",
+  "description": "Versioned, on-demand geography resources and sourced boundary assertions for web applications.",
+  "author": "BitBaum",
+  "homepage": "https://github.com/bitbaum/geo-kit#readme",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/bitbaum/geo-kit.git"
+  },
+  "bugs": {
+    "url": "https://github.com/bitbaum/geo-kit/issues"
+  },
+  "license": "MIT",
+  "type": "module",
+  "packageManager": "pnpm@11.25.0",
+  "engines": { "node": ">=20" },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": ["dist", "README.md", "LICENSE"],
+  "publishConfig": { "access": "public", "provenance": true },
+  "sideEffects": false,
+  "scripts": {
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "build": "tsc -p tsconfig.build.json",
+    "test": "node --experimental-strip-types --test test/*.test.ts",
+    "pack:check": "node scripts/check-pack.mjs",
+    "verify": "pnpm run typecheck && pnpm run test && pnpm run build && pnpm run pack:check"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "^5.8.0"
+  }
+}

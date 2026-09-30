@@ -1,0 +1,68 @@
+name: Publish
+
+on:
+  push:
+    tags: ["v*"]
+
+concurrency:
+  group: publish
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    if: vars.NPM_PUBLISHING == 'on'
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+      - name: Check registry for this version
+        id: check
+        run: |
+          name=$(node -p "require('./package.json').name")
+          version=$(node -p "require('./package.json').version")
+          echo "name=$name" >> "$GITHUB_OUTPUT"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          if npm view "$name@$version" version >/dev/null 2>&1; then
+            echo "publish=false" >> "$GITHUB_OUTPUT"
+            echo "✅ `$name@$version` already exists; nothing to publish." >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "publish=true" >> "$GITHUB_OUTPUT"
+          fi
+      - if: steps.check.outputs.publish == 'true'
+        run: pnpm install --frozen-lockfile --ignore-scripts
+      - if: steps.check.outputs.publish == 'true'
+        run: pnpm run verify
+      - name: Confirm tag matches package version
+        if: steps.check.outputs.publish == 'true'
+        run: |
+          tag="${GITHUB_REF_NAME#v}"
+          pkg=$(node -p "require('./package.json').version")
+          test "$tag" = "$pkg" || { echo "Tag v$tag does not match package.json $pkg" >&2; exit 1; }
+      - name: Publish with npm Trusted Publishing
+        if: steps.check.outputs.publish == 'true'
+        env:
+          NAME: ${{ steps.check.outputs.name }}
+          VERSION: ${{ steps.check.outputs.version }}
+        run: |
+          if npm publish; then
+            echo "🚀 Published `$NAME@$VERSION`." >> "$GITHUB_STEP_SUMMARY"
+          elif npm view "$NAME@$VERSION" version >/dev/null 2>&1; then
+            echo "✅ `$NAME@$VERSION` was published concurrently." >> "$GITHUB_STEP_SUMMARY"
+          else
+            exit 1
+          fi
+
+  not-yet-bootstrapped:
+    runs-on: ubuntu-latest
+    if: vars.NPM_PUBLISHING != 'on'
+    steps:
+      - run: |
+          echo "npm publishing is not bootstrapped; no package was published." >> "$GITHUB_STEP_SUMMARY"
+          echo "After first publish and Trusted Publishing setup, set repository variable NPM_PUBLISHING=on." >> "$GITHUB_STEP_SUMMARY"
