@@ -1,4 +1,4 @@
-import type { ISODate, ManifestValidationOptions } from "./types.ts";
+import type { ISODate, Position, ManifestValidationOptions } from "./types.ts";
 export declare function isStableKey(value: unknown): value is string;
 export declare function isISODate(value: unknown): value is ISODate;
 export declare function isPlainObject(value: unknown): value is Record<string, unknown>;
@@ -12,3 +12,5 @@ export declare function periodContains(from: ISODate | null, to: ISODate | null,
 export declare function validateAreaAssertions(value: unknown): string[];
 /** Validate a GeoJSON geometry's coordinates and structural rules. */
 export declare function validateGeometry(value: unknown, maxPositions?: number): string[];
+/** True when a coordinate tuple is a finite WGS84 position (lon, lat, optional altitude). */
+export declare function isWgs84Position(value: unknown): value is Position;

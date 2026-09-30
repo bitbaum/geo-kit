@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import test from "node:test";
 import {
   isISODate,
+  isWgs84Position,
   loadGeographyResources,
   makeGeometryRef,
   selectGeographyResources,
@@ -135,6 +136,15 @@ test("geometry checks WGS84 bounds, Polygon ring closure, nesting, and position 
   assert.ok(validateGeometry({ type: "Point", coordinates: [181, 0] }).some((p) => p.includes("WGS84")));
   assert.ok(validateGeometry({ type: "LineString", coordinates: [[0, 0]] }).some((p) => p.includes("at least 2")));
   assert.ok(validateGeometry(SQUARE, 3).some((p) => p.includes("exceeds 3")));
+});
+
+test("a shared WGS84 position validator handles longitude-first coordinates and altitude", () => {
+  assert.equal(isWgs84Position([180, -90]), true);
+  assert.equal(isWgs84Position([-181, 0]), false);
+  assert.equal(isWgs84Position([0, 91]), false);
+  assert.equal(isWgs84Position([0, 0, 100]), true);
+  assert.equal(isWgs84Position([0, Number.NaN]), false);
+  assert.equal(isWgs84Position([0]), false);
 });
 
 function draft(overrides: Partial<BoundaryDraft> = {}): BoundaryDraft {

@@ -2,6 +2,7 @@ import type {
   AreaAssertionKind,
   GeographyResource,
   ISODate,
+  Position,
   ManifestValidationOptions,
   ResourceFormat,
 } from "./types.ts";
@@ -222,14 +223,7 @@ export function validateGeometry(value: unknown, maxPositions = 1_000_000): stri
       if (count === maxPositions + 1) problems.push(`geometry exceeds ${maxPositions} positions`);
       return;
     }
-    if (!Array.isArray(position) || position.length < 2 || !position.every(Number.isFinite)) {
-      problems.push(`${path} must contain finite longitude and latitude coordinates`);
-      return;
-    }
-    if (position.length > 4) problems.push(`${path} has more than four coordinate dimensions`);
-    const [longitude, latitude] = position as number[];
-    if (longitude! < -180 || longitude! > 180) problems.push(`${path} longitude is outside WGS84 bounds`);
-    if (latitude! < -90 || latitude! > 90) problems.push(`${path} latitude is outside WGS84 bounds`);
+    problems.push(...positionProblems(position, path));
   };
   const checkLine = (positions: unknown, path: string, minimum: number): void => {
     if (!Array.isArray(positions) || positions.length < minimum) {
@@ -303,5 +297,22 @@ export function validateGeometry(value: unknown, maxPositions = 1_000_000): stri
     }
   };
   visit(value, "geometry", 0);
+  return problems;
+}
+
+/** True when a coordinate tuple is a finite WGS84 position (lon, lat, optional altitude). */
+export function isWgs84Position(value: unknown): value is Position {
+  return positionProblems(value, "position").length === 0;
+}
+
+function positionProblems(value: unknown, path: string): string[] {
+  const problems: string[] = [];
+  if (!Array.isArray(value) || value.length < 2 || !value.every(Number.isFinite)) {
+    return [`${path} must contain finite longitude and latitude coordinates`];
+  }
+  if (value.length > 4) problems.push(`${path} has more than four coordinate dimensions`);
+  const [longitude, latitude] = value as number[];
+  if (longitude! < -180 || longitude! > 180) problems.push(`${path} longitude is outside WGS84 bounds`);
+  if (latitude! < -90 || latitude! > 90) problems.push(`${path} latitude is outside WGS84 bounds`);
   return problems;
 }
