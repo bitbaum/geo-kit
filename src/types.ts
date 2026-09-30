@@ -41,7 +41,7 @@ export interface GeographySource {
 /** A single immutable geometry file in a manifest. */
 export interface GeographyResource {
   id: string;
-  sourceId: string;
+  sourceIds: readonly string[];
   /** An open key such as `administrative`, `economic`, `ecological`, or `custom`. */
   kindKey: string;
   /** Stable identifier for the geographic system or scope. */
@@ -70,7 +70,16 @@ export interface GeographyManifest {
   datasetVersion: string;
   generatedAt: string;
   sources: readonly GeographySource[];
+  viewpoints: readonly GeographyViewpoint[];
   resources: readonly GeographyResource[];
+}
+
+/** A named account of the perspective represented by one or more resources. */
+export interface GeographyViewpoint {
+  key: string;
+  label: string;
+  description: string;
+  sourceIds: readonly string[];
 }
 
 export interface LicenseRule {

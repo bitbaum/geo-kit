@@ -33,7 +33,7 @@ async function resourceFor(data: unknown, overrides: Partial<GeographyResource> 
   const bytes = new TextEncoder().encode(JSON.stringify(data));
   const resource: GeographyResource = {
     id: "ch-admin1-2026",
-    sourceId: "source-ch",
+    sourceIds: ["source-ch"],
     kindKey: "administrative",
     geographyId: "ch",
     levelKey: "admin1",
@@ -71,6 +71,13 @@ function makeManifest(resources: GeographyResource[]): GeographyManifest {
       retrievedAt: "2026-09-30T11:00:00.000Z",
       attribution: "Test publisher, 2026",
     }],
+    viewpoints: [...new Set(resources.flatMap((resource) => resource.viewpointKey ? [resource.viewpointKey] : []))]
+      .map((key) => ({
+        key,
+        label: `${key} perspective`,
+        description: `Test boundary depiction for ${key}.`,
+        sourceIds: [...new Set(resources.filter((resource) => resource.viewpointKey === key).flatMap((resource) => resource.sourceIds))],
+      })),
     resources,
   };
 }
@@ -90,6 +97,23 @@ test("manifest validates data provenance, attribution policy, unique ids, and sa
     assert.ok(validateGeographyManifest({ ...manifest, sources: [{ ...manifest.sources[0], attribution: "" }] }, { licensePolicy: policy }).some((p) => p.includes("requires source attribution")));
     assert.ok(validateGeographyManifest({ ...manifest, resources: [resource, { ...resource, id: "other", href: "/geography/%2e%2e/secrets" }] }).some((p) => p.includes("safe root-relative")));
     assert.ok(validateGeographyManifest({ ...manifest, resources: [resource, resource] }).some((p) => p.includes("duplicates")));
+    assert.deepEqual(validateGeographyManifest({ ...manifest, viewpoints: [] }), []);
+    const secondSource = {
+      id: "source-second",
+      publisher: "Second publisher",
+      dataset: "Second dataset",
+      url: "https://example.test/second",
+      licenseSPDX: "CC-BY-4.0",
+      retrievedAt: "2026-09-30T11:00:00.000Z",
+    };
+    const combined = {
+      ...manifest,
+      sources: [...manifest.sources, secondSource],
+      resources: [{ ...resource, sourceIds: ["source-ch", "source-second"] }],
+    };
+    assert.ok(validateGeographyManifest(combined, { licensePolicy: policy }).some((p) => p.includes("requires source attribution")));
+    const undeclared = { ...resource, id: "undeclared", viewpointKey: "missing-view" };
+    assert.ok(validateGeographyManifest({ ...manifest, resources: [undeclared] }).some((p) => p.includes("does not reference a declared viewpoint")));
   });
 });
 
@@ -207,7 +231,7 @@ test("TopoJSON resource validation checks transform, coordinates, object arcs, a
   const bytes = new TextEncoder().encode(JSON.stringify(topology));
   const resource: GeographyResource = {
     id: "topo",
-    sourceId: "source-ch",
+    sourceIds: ["source-ch"],
     kindKey: "administrative",
     geographyId: "ch",
     levelKey: "admin1",

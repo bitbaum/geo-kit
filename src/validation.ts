@@ -95,8 +95,9 @@ export function validateGeographyManifest(
   }
   if (!isDateTime(value.generatedAt)) problems.push("generatedAt must be an ISO date-time");
   if (!Array.isArray(value.sources)) problems.push("sources must be an array");
+  if (!Array.isArray(value.viewpoints)) problems.push("viewpoints must be an array");
   if (!Array.isArray(value.resources)) problems.push("resources must be an array");
-  if (!Array.isArray(value.sources) || !Array.isArray(value.resources)) return problems;
+  if (!Array.isArray(value.sources) || !Array.isArray(value.viewpoints) || !Array.isArray(value.resources)) return problems;
 
   const maxResources = options.maxResources ?? 100_000;
   const maxByteSize = options.maxByteSize ?? Number.MAX_SAFE_INTEGER;
@@ -127,6 +128,34 @@ export function validateGeographyManifest(
     if (!isDateTime(raw.retrievedAt)) problems.push(`${where}.retrievedAt must be an ISO date-time`);
   }
 
+  const viewpoints = new Map<string, Record<string, unknown>>();
+  for (const [i, raw] of value.viewpoints.entries()) {
+    const where = `viewpoints[${i}]`;
+    if (!isPlainObject(raw)) {
+      problems.push(`${where} must be an object`);
+      continue;
+    }
+    if (!isStableKey(raw.key)) problems.push(`${where}.key is invalid`);
+    else if (viewpoints.has(raw.key)) problems.push(`${where}.key duplicates ${raw.key}`);
+    else viewpoints.set(raw.key, raw);
+    for (const field of ["label", "description"] as const) {
+      if (typeof raw[field] !== "string" || !raw[field].trim()) problems.push(`${where}.${field} is required`);
+    }
+    if (!Array.isArray(raw.sourceIds) || raw.sourceIds.length === 0) {
+      problems.push(`${where}.sourceIds must name at least one declared source`);
+    } else {
+      const used = new Set<string>();
+      for (const sourceId of raw.sourceIds) {
+        if (typeof sourceId !== "string" || !sourceIds.has(sourceId)) {
+          problems.push(`${where}.sourceIds contains an undeclared source`);
+        } else if (used.has(sourceId)) {
+          problems.push(`${where}.sourceIds duplicates ${sourceId}`);
+        }
+        if (typeof sourceId === "string") used.add(sourceId);
+      }
+    }
+  }
+
   const policy = new Map((options.licensePolicy ?? []).map((rule) => [rule.spdx, rule]));
   for (const [i, raw] of value.resources.entries()) {
     const where = `resources[${i}]`;
@@ -143,16 +172,25 @@ export function validateGeographyManifest(
       if (resourceIds.has(raw.id)) problems.push(`${where}.id duplicates ${raw.id}`);
       resourceIds.add(raw.id);
     }
-    if (typeof raw.sourceId !== "string" || !sourceIds.has(raw.sourceId)) {
-      problems.push(`${where}.sourceId does not reference a declared source`);
+    const resourceSourceIds = new Set<string>();
+    if (!Array.isArray(raw.sourceIds) || raw.sourceIds.length === 0) {
+      problems.push(`${where}.sourceIds must name at least one declared source`);
     } else {
-      const source = sources.get(raw.sourceId)!;
+      for (const sourceId of raw.sourceIds) {
+        if (typeof sourceId !== "string" || !sourceIds.has(sourceId)) {
+          problems.push(`${where}.sourceIds contains an undeclared source`);
+          continue;
+        }
+        if (resourceSourceIds.has(sourceId)) problems.push(`${where}.sourceIds duplicates ${sourceId}`);
+        resourceSourceIds.add(sourceId);
+        const source = sources.get(sourceId)!;
       const licenseRule = policy.get(String(source.licenseSPDX));
       if (options.licensePolicy && !licenseRule) {
         problems.push(`${where} uses license ${String(source.licenseSPDX)} outside the supplied policy`);
       }
       if (licenseRule?.requiresAttribution && (typeof source.attribution !== "string" || !source.attribution.trim())) {
         problems.push(`${where} requires source attribution for ${String(source.licenseSPDX)}`);
+      }
       }
     }
     if (!validFormats.has(raw.format as ResourceFormat)) problems.push(`${where}.format is unsupported`);
@@ -167,6 +205,16 @@ export function validateGeographyManifest(
     if (!validPeriod(raw.validFrom, raw.validTo)) problems.push(`${where} has an invalid validity period`);
     if (!(raw.viewpointKey === null || (typeof raw.viewpointKey === "string" && isStableKey(raw.viewpointKey)))) {
       problems.push(`${where}.viewpointKey must be null or a stable key`);
+    } else if (typeof raw.viewpointKey === "string") {
+      const viewpoint = viewpoints.get(raw.viewpointKey);
+      if (!viewpoint) {
+        problems.push(`${where}.viewpointKey does not reference a declared viewpoint`);
+      } else if (
+        !Array.isArray(viewpoint.sourceIds) ||
+        !viewpoint.sourceIds.every((sourceId) => resourceSourceIds.has(sourceId))
+      ) {
+        problems.push(`${where}.sourceIds do not include the sources listed for viewpoint ${raw.viewpointKey}`);
+      }
     }
     if (raw.bbox !== undefined && !validBounds(raw.bbox)) problems.push(`${where}.bbox is invalid`);
     for (const field of ["minZoom", "maxZoom"] as const) {

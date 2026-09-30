@@ -32,10 +32,14 @@ stays disabled until that is complete.
 Publish a small manifest beside content-addressed GeoJSON or TopoJSON resources.
 Each resource identifies its source, geography, open-ended layer and level keys,
 validity period, optional map viewpoint, URL, SHA-256 digest, size and feature
-count. A client asks for one or more geography/resource IDs, a date, and (when
-needed) a viewpoint. The default view includes only resources with no explicit
-viewpoint. `selectGeographyResources` rejects broad accidental loads by default
-and enforces byte/resource limits before any request is made.
+count. Resources can reference multiple sources, with each source's licence and
+attribution checked independently. Viewpoints have names, descriptions and
+source references, so a client can explain which representation it displays.
+A client asks for one or more
+geography/resource IDs, a date, and (when needed) a viewpoint. The default view
+includes only resources with no explicit viewpoint. `selectGeographyResources`
+rejects broad accidental loads by default and enforces byte/resource limits
+before any request is made.
 
 `loadGeographyResources` fetches selected same-origin URLs only, without cookies
 and without following redirects. It checks the decoded file size, SHA-256,
