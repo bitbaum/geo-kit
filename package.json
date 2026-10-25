@@ -35,7 +35,7 @@
     "verify": "pnpm run typecheck && pnpm run test && pnpm run build && pnpm run pack:check"
   },
   "devDependencies": {
-    "@types/node": "^22.0.0",
-    "typescript": "^5.8.0"
+    "@types/node": "^26.6.5",
+    "typescript": "^7.0.2"
   }
 }
