@@ -1,6 +1,6 @@
 {
   "name": "@bitbaum/geo-kit",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Versioned, on-demand geography resources and sourced boundary assertions for web applications.",
   "author": "BitBaum",
   "homepage": "https://github.com/bitbaum/geo-kit#readme",
@@ -14,7 +14,9 @@
   "license": "MIT",
   "type": "module",
   "packageManager": "pnpm@11.25.0",
-  "engines": { "node": ">=20" },
+  "engines": {
+    "node": ">=20"
+  },
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {
@@ -24,8 +26,15 @@
       "default": "./dist/index.js"
     }
   },
-  "files": ["dist", "README.md", "LICENSE"],
-  "publishConfig": { "access": "public", "provenance": true },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
   "sideEffects": false,
   "scripts": {
     "typecheck": "tsc --noEmit -p tsconfig.json",
