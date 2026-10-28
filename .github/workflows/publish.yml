@@ -1,3 +1,4 @@
+# prettier-ignore
 name: Publish
 
 # The same file in every @bitbaum package. A merged version bump releases
@@ -30,7 +31,12 @@ on:
     branches: [main]
   # The auto-merge sweep re-arms this after a GITHUB_TOKEN merge, which
   # starts no push workflow on its own (rearm_workflows in auto-merge.yml).
-  workflow_dispatch: {}
+  workflow_dispatch:
+    inputs:
+      diagnose_auth:
+        description: Test the npm trusted-publisher link without publishing anything.
+        type: boolean
+        default: false
 
 # Never two at once, never cancelled: a cancelled publish is a half-shipped
 # release.
@@ -63,8 +69,37 @@ jobs:
       # whatever the runner's Node happens to bundle.
       - run: npm install -g npm@11
 
+      # "Run workflow" with diagnose_auth ticked asks npm whether it trusts
+      # THIS workflow for this package, and publishes nothing. HTTP 200 =
+      # linked; 404 = the one form on npmjs.com is still to be filled in. The
+      # response body holds a short-lived token, so it is never printed.
+      - name: Is the npm trusted publisher linked? (no publish)
+        if: inputs.diagnose_auth == true
+        run: |
+          node --input-type=module <<'NODE'
+          const url = new URL(process.env.ACTIONS_ID_TOKEN_REQUEST_URL);
+          url.searchParams.set('audience', 'npm:registry.npmjs.org');
+          const identity = await fetch(url, {
+            headers: { authorization: `Bearer ${process.env.ACTIONS_ID_TOKEN_REQUEST_TOKEN}` },
+            signal: AbortSignal.timeout(30000),
+          });
+          if (!identity.ok) throw new Error(`GitHub OIDC request failed: HTTP ${identity.status}`);
+          const { value: jwt } = await identity.json();
+          const claims = JSON.parse(Buffer.from(jwt.split('.')[1], 'base64url'));
+          console.log('Publisher identity:', JSON.stringify({ repository: claims.repository, workflow_ref: claims.workflow_ref, ref: claims.ref }));
+          const name = JSON.parse(await (await import('node:fs/promises')).readFile('package.json', 'utf8')).name;
+          const exchange = await fetch(`https://registry.npmjs.org/-/npm/v1/oidc/token/exchange/package/${encodeURIComponent(name)}`, {
+            method: 'POST', headers: { authorization: `Bearer ${jwt}` },
+            signal: AbortSignal.timeout(30000),
+          });
+          console.log(`npm trust exchange for ${name}: HTTP ${exchange.status}`);
+          await exchange.body?.cancel();
+          if (!exchange.ok) throw new Error('npm does not trust this workflow for this package yet');
+          NODE
+
       - name: What does npm have?
         id: check
+        if: inputs.diagnose_auth != true
         env:
           BOOTSTRAP: ${{ secrets.NPM_BOOTSTRAP_TOKEN != '' }}
         run: |
