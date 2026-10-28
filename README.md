@@ -6,16 +6,13 @@ choices, personal data, HTTP server, or rendering framework.
 
 ## Install
 
-The Git repository is the install source until npm publishing is bootstrapped.
-Pin the reviewed v0.1.1 source commit for a reproducible install:
-
 ```sh
-pnpm add github:bitbaum/geo-kit#a337aec928cf7804fecf459c308d366b90f4b2fa
+pnpm add @bitbaum/geo-kit
 ```
 
-The npm workflow uses npm Trusted Publishing and provenance. The first npm
-publish and publisher trust setup require a maintainer-held passkey; publishing
-stays disabled until that is complete.
+Install releases from npm, not a commit: a semver range is what lets a fix
+reach every product. `@bitbaum/geo-kit@0.1.1` is on npm; later releases are
+published by this repository's `publish.yml`.
 
 ## Ownership
 
