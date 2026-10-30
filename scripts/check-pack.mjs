@@ -22,7 +22,7 @@ try {
 }
 
 const files = new Set(report[0]?.files?.map(({ path }) => path) ?? []);
-const required = ["package.json", "README.md", "LICENSE", "dist/index.js", "dist/index.d.ts"];
+const required = ["package.json", "README.md", "LICENSE", "dist/index.js", "dist/index.d.ts", "dist/map/index.js", "dist/map/index.d.ts"];
 const missing = required.filter((path) => !files.has(path));
 const unwanted = [...files].filter((path) => /^(src|test|node_modules)\//.test(path));
 

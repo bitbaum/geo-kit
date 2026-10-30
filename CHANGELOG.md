@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.2.0
+
+- Add `@bitbaum/geo-kit/map`: one Canvas 2D renderer for the geography this
+  package delivers, an orthographic globe that zoomed in is a flat map, so the
+  world and a commune are one projection. Framework-free `createMap` (turn,
+  pinch, wheel, keyboard, tap to select, flights, coasting, reduced motion),
+  shapes from TopoJSON or GeoJSON keyed by any id, fills by id, and the pure
+  camera, motion, culling, picking and fast-projection helpers. Extracted from
+  Substrata's globe, so Solon's map and Substrata's globe are one renderer.
+- `d3-geo` and `topojson-client` are optional peer dependencies, needed only
+  by `/map`.
+
 ## 0.1.1
 
 - Add bounded, same-origin manifest downloads with source and licence validation.
