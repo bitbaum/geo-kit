@@ -28,6 +28,8 @@ export interface FrameInfo {
   flight: number | null;
   /** True while the map moves and paints its coarse shapes. */
   moving: boolean;
+  /** Milliseconds since the reader last touched the map. */
+  sinceTouch: number;
 }
 
 export interface MapOptions<P = Record<string, unknown>> {
@@ -44,8 +46,16 @@ export interface MapOptions<P = Record<string, unknown>> {
   idleTurn?: boolean;
   /** A feature was tapped or chosen by keyboard; null for the sea. */
   onSelect?: (id: string | null) => void;
-  /** The mouse is over a feature (null when over none), at a canvas point. */
+  /** The mouse is over a feature (null when over none, or when a gesture starts), at a canvas point. */
   onHover?: (id: string | null, x: number, y: number) => void;
+  /**
+   * Asked first on a tap and on hover, before the features: true when the
+   * caller's own layer (a site, a marker) takes the point, so no feature is
+   * selected or outlined there.
+   */
+  pickFirst?: (x: number, y: number, projection: GeoProjection, kind: "tap" | "hover") => boolean;
+  /** The keyboard turned the map: the feature now facing the reader, or null. */
+  onFacing?: (id: string | null) => void;
   /** Draw on top of the map each frame. */
   over?: (ctx: CanvasRenderingContext2D, basis: Basis, projection: GeoProjection, frame: FrameInfo) => void;
   /** True while the overlay animates and needs another frame. */
@@ -63,6 +73,8 @@ export interface MapController {
   /** Mark a feature selected; `fly` turns the map to face it. */
   setSelected(id: string | null, options?: { fly?: boolean }): void;
   flyTo(camera: Camera, duration?: number): void;
+  /** Go to a view at once, with no flight. */
+  jumpTo(camera: Camera): void;
   zoomBy(factor: number | "home"): void;
   camera(): Camera;
   projection(): GeoProjection | null;
@@ -177,7 +189,9 @@ export function createMap<P>(canvas: HTMLCanvasElement, options: MapOptions<P>):
         moving ? shapes.coarse : shapes,
         paint,
         { hover: feature(hover), selected: feature(selected) },
-        options.over ? (c, basis, p) => options.over!(c, basis, p, { now, flight: flightAt, moving }) : undefined,
+        options.over
+          ? (c, basis, p) => options.over!(c, basis, p, { now, flight: flightAt, moving, sinceTouch: now - touched })
+          : undefined,
       );
     }
     if (again) raf = requestAnimationFrame(tick);
@@ -216,6 +230,16 @@ export function createMap<P>(canvas: HTMLCanvasElement, options: MapOptions<P>):
     return proj ? pickAt(index, proj, x, y) : null;
   };
   const choose = (id: string | null) => options.onSelect?.(id);
+  const takenFirst = (x: number, y: number, kind: "tap" | "hover") => {
+    const proj = projection();
+    return !!proj && !!options.pickFirst?.(x, y, proj, kind);
+  };
+  const facing = () => {
+    const view = viewAt(performance.now());
+    if (!view) return null;
+    const d = disc(view);
+    return pick(d.cx, d.cy)?.id ?? null;
+  };
 
   /* ------------------------------------------------------------ input */
 
@@ -229,8 +253,16 @@ export function createMap<P>(canvas: HTMLCanvasElement, options: MapOptions<P>):
     keydown(e: KeyboardEvent) {
       const step = e.shiftKey ? 30 : 10;
       const perStep = step / Math.max(camera.k, 1);
-      const turn = (dLon: number, dLat: number) =>
-        flyTo({ center: [camera.center[0] + dLon * perStep, camera.center[1] + dLat * perStep], k: camera.k }, 220);
+      const turn = (dLon: number, dLat: number) => {
+        motion = {};
+        touched = performance.now();
+        camera = {
+          center: [wrapLon(camera.center[0] + dLon * perStep), clampTilt(camera.center[1] + dLat * perStep, limits)],
+          k: camera.k,
+        };
+        invalidate();
+        options.onFacing?.(facing());
+      };
       const keys: Record<string, () => void> = {
         ArrowLeft: () => turn(-1, 0),
         ArrowRight: () => turn(1, 0),
@@ -241,12 +273,7 @@ export function createMap<P>(canvas: HTMLCanvasElement, options: MapOptions<P>):
         "-": () => zoomBy(1 / 1.5),
         "0": () => zoomBy("home"),
         Home: () => zoomBy("home"),
-        Enter: () => {
-          const view = viewAt(performance.now());
-          if (!view) return;
-          const d = disc(view);
-          choose(pick(d.cx, d.cy)?.id ?? null);
-        },
+        Enter: () => choose(facing()),
       };
       const run = keys[e.key];
       if (!run) return;
@@ -266,19 +293,26 @@ export function createMap<P>(canvas: HTMLCanvasElement, options: MapOptions<P>):
       else gesture.moved = true; // a second finger is never a tap
       grab();
       grabbed = true;
+      if (hover !== null) {
+        hover = null;
+        options.onHover?.(null, at.x, at.y);
+      }
     },
     pointermove(e: PointerEvent) {
       const at = local(e);
       const before = pointers.get(e.pointerId);
       if (!before) {
         if (e.pointerType === "mouse") {
-          const id = pick(at.x, at.y)?.id ?? null;
-          canvas.style.cursor = id ? "pointer" : "";
+          touched = performance.now();
+          const taken = takenFirst(at.x, at.y, "hover");
+          const id = taken ? null : (pick(at.x, at.y)?.id ?? null);
+          canvas.style.cursor = taken || id ? "pointer" : "";
           if (id !== hover) {
             hover = id;
             invalidate();
           }
-          options.onHover?.(id, at.x, at.y);
+          // The caller's own layer answered this point; its hover is its own to show.
+          if (!taken) options.onHover?.(id, at.x, at.y);
         }
         return;
       }
@@ -313,7 +347,7 @@ export function createMap<P>(canvas: HTMLCanvasElement, options: MapOptions<P>):
       const g = gesture;
       if (!g.moved) {
         const at = local(e);
-        choose(pick(at.x, at.y)?.id ?? null);
+        if (!takenFirst(at.x, at.y, "tap")) choose(pick(at.x, at.y)?.id ?? null);
         return;
       }
       const fresh = e.timeStamp - g.t < 80;
@@ -388,6 +422,12 @@ export function createMap<P>(canvas: HTMLCanvasElement, options: MapOptions<P>):
       else invalidate();
     },
     flyTo,
+    jumpTo(to) {
+      motion = {};
+      touched = performance.now();
+      camera = { center: [wrapLon(to.center[0]), clampTilt(to.center[1], limits)], k: clampZoom(to.k, limits) };
+      invalidate();
+    },
     zoomBy,
     camera: () => camera,
     projection: () => projection(),

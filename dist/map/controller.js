@@ -102,7 +102,9 @@ export function createMap(canvas, options) {
             const dpr = pixelRatio();
             ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
             const flightAt = motion.flight ? (now - motion.flight.start) / motion.flight.f.duration : null;
-            paintMap(ctx, size, proj, moving ? shapes.coarse : shapes, paint, { hover: feature(hover), selected: feature(selected) }, options.over ? (c, basis, p) => options.over(c, basis, p, { now, flight: flightAt, moving }) : undefined);
+            paintMap(ctx, size, proj, moving ? shapes.coarse : shapes, paint, { hover: feature(hover), selected: feature(selected) }, options.over
+                ? (c, basis, p) => options.over(c, basis, p, { now, flight: flightAt, moving, sinceTouch: now - touched })
+                : undefined);
         }
         if (again)
             raf = requestAnimationFrame(tick);
@@ -144,6 +146,17 @@ export function createMap(canvas, options) {
         return proj ? pickAt(index, proj, x, y) : null;
     };
     const choose = (id) => options.onSelect?.(id);
+    const takenFirst = (x, y, kind) => {
+        const proj = projection();
+        return !!proj && !!options.pickFirst?.(x, y, proj, kind);
+    };
+    const facing = () => {
+        const view = viewAt(performance.now());
+        if (!view)
+            return null;
+        const d = disc(view);
+        return pick(d.cx, d.cy)?.id ?? null;
+    };
     /* ------------------------------------------------------------ input */
     const pointers = new Map();
     let gesture = { moved: false, vx: 0, vy: 0, t: 0, startX: 0, startY: 0 };
@@ -155,7 +168,16 @@ export function createMap(canvas, options) {
         keydown(e) {
             const step = e.shiftKey ? 30 : 10;
             const perStep = step / Math.max(camera.k, 1);
-            const turn = (dLon, dLat) => flyTo({ center: [camera.center[0] + dLon * perStep, camera.center[1] + dLat * perStep], k: camera.k }, 220);
+            const turn = (dLon, dLat) => {
+                motion = {};
+                touched = performance.now();
+                camera = {
+                    center: [wrapLon(camera.center[0] + dLon * perStep), clampTilt(camera.center[1] + dLat * perStep, limits)],
+                    k: camera.k,
+                };
+                invalidate();
+                options.onFacing?.(facing());
+            };
             const keys = {
                 ArrowLeft: () => turn(-1, 0),
                 ArrowRight: () => turn(1, 0),
@@ -166,13 +188,7 @@ export function createMap(canvas, options) {
                 "-": () => zoomBy(1 / 1.5),
                 "0": () => zoomBy("home"),
                 Home: () => zoomBy("home"),
-                Enter: () => {
-                    const view = viewAt(performance.now());
-                    if (!view)
-                        return;
-                    const d = disc(view);
-                    choose(pick(d.cx, d.cy)?.id ?? null);
-                },
+                Enter: () => choose(facing()),
             };
             const run = keys[e.key];
             if (!run)
@@ -197,19 +213,27 @@ export function createMap(canvas, options) {
                 gesture.moved = true; // a second finger is never a tap
             grab();
             grabbed = true;
+            if (hover !== null) {
+                hover = null;
+                options.onHover?.(null, at.x, at.y);
+            }
         },
         pointermove(e) {
             const at = local(e);
             const before = pointers.get(e.pointerId);
             if (!before) {
                 if (e.pointerType === "mouse") {
-                    const id = pick(at.x, at.y)?.id ?? null;
-                    canvas.style.cursor = id ? "pointer" : "";
+                    touched = performance.now();
+                    const taken = takenFirst(at.x, at.y, "hover");
+                    const id = taken ? null : (pick(at.x, at.y)?.id ?? null);
+                    canvas.style.cursor = taken || id ? "pointer" : "";
                     if (id !== hover) {
                         hover = id;
                         invalidate();
                     }
-                    options.onHover?.(id, at.x, at.y);
+                    // The caller's own layer answered this point; its hover is its own to show.
+                    if (!taken)
+                        options.onHover?.(id, at.x, at.y);
                 }
                 return;
             }
@@ -248,7 +272,8 @@ export function createMap(canvas, options) {
             const g = gesture;
             if (!g.moved) {
                 const at = local(e);
-                choose(pick(at.x, at.y)?.id ?? null);
+                if (!takenFirst(at.x, at.y, "tap"))
+                    choose(pick(at.x, at.y)?.id ?? null);
                 return;
             }
             const fresh = e.timeStamp - g.t < 80;
@@ -327,6 +352,12 @@ export function createMap(canvas, options) {
                 invalidate();
         },
         flyTo,
+        jumpTo(to) {
+            motion = {};
+            touched = performance.now();
+            camera = { center: [wrapLon(to.center[0]), clampTilt(to.center[1], limits)], k: clampZoom(to.k, limits) };
+            invalidate();
+        },
         zoomBy,
         camera: () => camera,
         projection: () => projection(),

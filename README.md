@@ -130,7 +130,8 @@ map.flyTo(cameraForBounds([5.96, 45.82, 10.49, 47.81], limits));
 - **Layers.** The palette's sphere, graticule, glow and limb shade are each
   optional, so a lit globe of the world and a plain map where the data is the
   picture are the same painter. `over` draws the caller's own layer (sites,
-  routes, figures) on top each frame, with the frame's projection.
+  routes, figures) on top each frame, with the frame's projection, and
+  `pickFirst` lets that layer take a tap or a hover before the features.
 - **Pure parts.** The camera, motion, culling, picking and the fast
   projection are exported and tested without a browser.
 

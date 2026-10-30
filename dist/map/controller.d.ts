@@ -24,6 +24,8 @@ export interface FrameInfo {
     flight: number | null;
     /** True while the map moves and paints its coarse shapes. */
     moving: boolean;
+    /** Milliseconds since the reader last touched the map. */
+    sinceTouch: number;
 }
 export interface MapOptions<P = Record<string, unknown>> {
     shapes: MapShapes<P>;
@@ -42,8 +44,16 @@ export interface MapOptions<P = Record<string, unknown>> {
     idleTurn?: boolean;
     /** A feature was tapped or chosen by keyboard; null for the sea. */
     onSelect?: (id: string | null) => void;
-    /** The mouse is over a feature (null when over none), at a canvas point. */
+    /** The mouse is over a feature (null when over none, or when a gesture starts), at a canvas point. */
     onHover?: (id: string | null, x: number, y: number) => void;
+    /**
+     * Asked first on a tap and on hover, before the features: true when the
+     * caller's own layer (a site, a marker) takes the point, so no feature is
+     * selected or outlined there.
+     */
+    pickFirst?: (x: number, y: number, projection: GeoProjection, kind: "tap" | "hover") => boolean;
+    /** The keyboard turned the map: the feature now facing the reader, or null. */
+    onFacing?: (id: string | null) => void;
     /** Draw on top of the map each frame. */
     over?: (ctx: CanvasRenderingContext2D, basis: Basis, projection: GeoProjection, frame: FrameInfo) => void;
     /** True while the overlay animates and needs another frame. */
@@ -62,6 +72,8 @@ export interface MapController {
         fly?: boolean;
     }): void;
     flyTo(camera: Camera, duration?: number): void;
+    /** Go to a view at once, with no flight. */
+    jumpTo(camera: Camera): void;
     zoomBy(factor: number | "home"): void;
     camera(): Camera;
     projection(): GeoProjection | null;
