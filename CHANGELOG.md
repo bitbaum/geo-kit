@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.3.0
+
+- `/map`: what a globe with its own layer needs, from moving Substrata's
+  globe onto it. `pickFirst` lets the caller's layer (a site, a marker) take a
+  tap or a hover before the features; `onFacing` names the feature facing the
+  reader after a keyboard turn; `jumpTo` goes to a view with no flight; each
+  frame's `sinceTouch` tells an animated layer how long the map has been left
+  alone. The hover label clears when a gesture starts.
+
 ## 0.2.0
 
 - Add `@bitbaum/geo-kit/map`: one Canvas 2D renderer for the geography this
