@@ -1,8 +1,9 @@
 # `@bitbaum/geo-kit`
 
 Country-neutral contracts for sharing versioned geography data across
-applications. The package owns no country packs, political claims, source
-choices, personal data, HTTP server, or rendering framework.
+applications, and one renderer for it (`@bitbaum/geo-kit/map`). The package
+owns no country packs, political claims, source choices, personal data, HTTP
+server, or UI framework.
 
 ## Install
 
@@ -82,6 +83,56 @@ or publish them.
 The library never reads the system clock. Pass the date displayed by the app to
 support historical maps deterministically. An explicit viewpoint is opt-in;
 the library does not treat any boundary representation as the default truth.
+
+## Drawing it: `@bitbaum/geo-kit/map`
+
+One map for every product: an orthographic globe on Canvas 2D (`d3-geo`).
+Zoomed far in, the globe is a flat map of the place in front of the reader, so
+the world, a country and a commune are one projection and one renderer.
+Canvas 2D rather than WebGL: a few thousand path segments a frame fit a
+phone's frame budget, and it runs wherever the page runs.
+
+```sh
+pnpm add @bitbaum/geo-kit d3-geo topojson-client
+```
+
+`d3-geo` (and `topojson-client`, for TopoJSON) are optional peer
+dependencies: a product that only loads data does not install them.
+
+```ts
+import { cameraForBounds, createMap, shapesFromTopology } from "@bitbaum/geo-kit/map";
+
+const shapes = shapesFromTopology(topology, { object: "communes", idOf: (f) => String(f.id) });
+const limits = { minZoom: 1, maxZoom: 2000, maxTilt: 80 };
+const map = createMap(canvas, {
+  shapes,
+  palette: { sphere: "#fff", land: "#eee", border: "#999", hover: "#555", selected: "#000" },
+  fills: new Map([["261", "#08519c"]]),
+  limits,
+  onSelect: (id) => console.log(id),
+});
+map.resize(390, 600);
+map.flyTo(cameraForBounds([5.96, 45.82, 10.49, 47.81], limits));
+```
+
+- **Framework-free.** `createMap` takes a `<canvas>` and returns methods
+  (`resize`, `setFills`, `setSelected`, `flyTo`, `zoomBy`, `destroy`, …); a
+  React or other page wraps it in a few lines and keeps no map state of its own.
+- **Input.** One finger or the mouse turns it, two pinch, the wheel zooms, a
+  tap selects, a flick coasts. The keyboard treats the canvas as one control:
+  arrows turn, + and − zoom, Home resets, Enter selects what faces the reader.
+- **Cost.** It draws only when something changes; in motion it paints the
+  coarse shapes (every third vertex of each shared arc, so neighbours still
+  meet), and full detail the frame after. Features on the far side, or off the
+  canvas when zoomed, are not drawn.
+- **Reduced motion.** Under `prefers-reduced-motion` a flight is a cut, a flick
+  does not coast and the idle turn never starts.
+- **Layers.** The palette's sphere, graticule, glow and limb shade are each
+  optional, so a lit globe of the world and a plain map where the data is the
+  picture are the same painter. `over` draws the caller's own layer (sites,
+  routes, figures) on top each frame, with the frame's projection.
+- **Pure parts.** The camera, motion, culling, picking and the fast
+  projection are exported and tested without a browser.
 
 ## Assertions and proposed boundaries
 

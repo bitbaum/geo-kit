@@ -1,7 +1,7 @@
 {
   "name": "@bitbaum/geo-kit",
-  "version": "0.1.2",
-  "description": "Versioned, on-demand geography resources and sourced boundary assertions for web applications.",
+  "version": "0.2.0",
+  "description": "Versioned, on-demand geography resources and sourced boundary assertions for web applications, and a Canvas 2D renderer for them (globe or map).",
   "author": "BitBaum",
   "homepage": "https://github.com/bitbaum/geo-kit#readme",
   "repository": {
@@ -24,6 +24,11 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js",
       "default": "./dist/index.js"
+    },
+    "./map": {
+      "types": "./dist/map/index.d.ts",
+      "import": "./dist/map/index.js",
+      "default": "./dist/map/index.js"
     }
   },
   "files": [
@@ -43,8 +48,27 @@
     "pack:check": "node scripts/check-pack.mjs",
     "verify": "pnpm run typecheck && pnpm run test && pnpm run build && pnpm run pack:check"
   },
+  "peerDependencies": {
+    "d3-geo": "^3.1.0",
+    "topojson-client": "^3.1.0"
+  },
+  "peerDependenciesMeta": {
+    "d3-geo": {
+      "optional": true
+    },
+    "topojson-client": {
+      "optional": true
+    }
+  },
   "devDependencies": {
+    "@types/d3-geo": "^3.1.1",
+    "@types/geojson": "^7946.0.16",
     "@types/node": "^22.0.0",
-    "typescript": "^5.8.0"
+    "@types/topojson-client": "^3.1.5",
+    "@types/topojson-specification": "^1.0.5",
+    "d3-geo": "3.1.1",
+    "topojson-client": "3.1.0",
+    "typescript": "^5.8.0",
+    "world-atlas": "2.0.2"
   }
 }
