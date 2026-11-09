@@ -149,12 +149,16 @@ export function paintMap(ctx, size, proj, shapes, paint, marks = {}, over) {
     ctx.stroke();
     blit(ctx, shade);
     const path = geoPath(proj, ctx);
-    const outline = (f, width, colour) => {
+    const outline = (f, width, colour, wash) => {
         if (!f)
             return;
         const feature = { type: "Feature", geometry: f.geometry, properties: null };
         ctx.beginPath();
         path(feature);
+        if (wash) {
+            ctx.fillStyle = wash;
+            ctx.fill("evenodd");
+        }
         ctx.strokeStyle = colour;
         ctx.lineWidth = width;
         ctx.stroke();
@@ -168,7 +172,7 @@ export function paintMap(ctx, size, proj, shapes, paint, marks = {}, over) {
         }
     };
     if (marks.hover !== marks.selected)
-        outline(marks.hover, 1.25, palette.hover);
-    outline(marks.selected, 2, palette.selected);
+        outline(marks.hover, 1.25, palette.hover, palette.hoverFill);
+    outline(marks.selected, 2, palette.selected, palette.selectedFill);
     over?.(ctx, basis, proj);
 }

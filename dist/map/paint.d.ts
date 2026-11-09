@@ -28,6 +28,10 @@ export interface Palette {
     limb?: [string, string];
     /** Border width in CSS pixels (default 0.6). */
     borderWidth?: number;
+    /** A wash over the feature under the pointer, so the whole place lights up, not only its edge. */
+    hoverFill?: string;
+    /** A wash over the selected feature. */
+    selectedFill?: string;
 }
 /**
  * Any CSS colour at an alpha, for gradients that fade without greying. The

@@ -1,6 +1,7 @@
 import { WORLD_LIMITS, clampTilt, clampZoom, disc, projectionFor, wrapLon, cameraFor } from "./camera.js";
 import { coast, dragged, flight } from "./motion.js";
 import { groupFills, paintMap } from "./paint.js";
+import { canvasMeasure, DEFAULT_LABEL_STYLES, labelAt, layoutLabels, paintLabels } from "./labels.js";
 import { pickAt, pickIndex } from "./pick.js";
 const IDLE_BEFORE_TURNING = 4000;
 const STOP_TURNING_AFTER = 120_000;
@@ -31,6 +32,11 @@ export function createMap(canvas, options) {
     let wake = 0;
     let last = 0;
     let destroyed = false;
+    let labels = options.labels ?? [];
+    let labelStyles = options.labelStyles ?? DEFAULT_LABEL_STYLES;
+    let placed = [];
+    let measure = null;
+    let lastTap = { t: -1e9, x: 0, y: 0 };
     const viewAt = (now) => {
         if (!shown)
             return null;
@@ -102,9 +108,16 @@ export function createMap(canvas, options) {
             const dpr = pixelRatio();
             ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
             const flightAt = motion.flight ? (now - motion.flight.start) / motion.flight.f.duration : null;
-            paintMap(ctx, size, proj, moving ? shapes.coarse : shapes, paint, { hover: feature(hover), selected: feature(selected) }, options.over
-                ? (c, basis, p) => options.over(c, basis, p, { now, flight: flightAt, moving, sinceTouch: now - touched })
-                : undefined);
+            paintMap(ctx, size, proj, moving ? shapes.coarse : shapes, paint, { hover: feature(hover), selected: feature(selected) }, (c, basis, p) => {
+                if (labels.length > 0) {
+                    measure ??= canvasMeasure(c);
+                    placed = layoutLabels(labels, p, camera.k, size, labelStyles, measure);
+                    paintLabels(c, placed);
+                }
+                else
+                    placed = [];
+                options.over?.(c, basis, p, { now, flight: flightAt, moving, sinceTouch: now - touched });
+            });
         }
         if (again)
             raf = requestAnimationFrame(tick);
@@ -131,9 +144,36 @@ export function createMap(canvas, options) {
         motion = {};
         touched = performance.now();
     };
-    const scale = (factor) => {
-        camera = { ...camera, k: clampZoom(camera.k * factor, limits) };
-        invalidate();
+    /** The camera after zooming by `factor` about a canvas point, so the place under it stays under it. */
+    const zoomedAt = (factor, x, y) => {
+        const view = viewAt(performance.now());
+        const k = clampZoom(camera.k * factor, limits);
+        if (!view)
+            return { ...camera, k };
+        const before = projectionFor(view, camera).invert?.([x, y]);
+        let next = { ...camera, k };
+        if (!before)
+            return next;
+        // Twice: on a sphere one correction leaves a small error far from the centre.
+        for (let i = 0; i < 2; i++) {
+            const after = projectionFor(view, next).invert?.([x, y]);
+            if (!after)
+                break;
+            next = {
+                center: [wrapLon(next.center[0] + before[0] - after[0]), clampTilt(next.center[1] + before[1] - after[1], limits)],
+                k,
+            };
+        }
+        return next;
+    };
+    const zoomAt = (factor, x, y, animate = false) => {
+        const to = zoomedAt(factor, x, y);
+        if (animate)
+            flyTo(to, 320);
+        else {
+            camera = to;
+            invalidate();
+        }
     };
     const zoomBy = (factor) => {
         if (factor === "home")
@@ -225,8 +265,9 @@ export function createMap(canvas, options) {
                 if (e.pointerType === "mouse") {
                     touched = performance.now();
                     const taken = takenFirst(at.x, at.y, "hover");
+                    const onLabel = !taken && !!options.onSelectLabel && !!labelAt(placed, at.x, at.y);
                     const id = taken ? null : (pick(at.x, at.y)?.id ?? null);
-                    canvas.style.cursor = taken || id ? "pointer" : "";
+                    canvas.style.cursor = taken || onLabel || id ? "pointer" : "";
                     if (id !== hover) {
                         hover = id;
                         invalidate();
@@ -258,8 +299,10 @@ export function createMap(canvas, options) {
                 if (other) {
                     const d0 = Math.hypot(before.x - other.x, before.y - other.y);
                     const d1 = Math.hypot(at.x - other.x, at.y - other.y);
-                    if (d0 > 0)
-                        scale(d1 / d0);
+                    if (d0 > 0) {
+                        camera = zoomedAt(d1 / d0, (at.x + other.x) / 2, (at.y + other.y) / 2);
+                        invalidate();
+                    }
                 }
             }
             pointers.set(e.pointerId, at);
@@ -272,7 +315,19 @@ export function createMap(canvas, options) {
             const g = gesture;
             if (!g.moved) {
                 const at = local(e);
-                if (!takenFirst(at.x, at.y, "tap"))
+                // A second tap close to the first, soon after: zoom in there (a mouse has dblclick).
+                if (e.pointerType !== "mouse" && e.timeStamp - lastTap.t < 320 && Math.hypot(at.x - lastTap.x, at.y - lastTap.y) < 32) {
+                    lastTap = { t: -1e9, x: 0, y: 0 };
+                    zoomAt(2, at.x, at.y, true);
+                    return;
+                }
+                lastTap = { t: e.timeStamp, x: at.x, y: at.y };
+                if (takenFirst(at.x, at.y, "tap"))
+                    return;
+                const label = options.onSelectLabel ? labelAt(placed, at.x, at.y) : null;
+                if (label)
+                    options.onSelectLabel(label.label.id);
+                else
                     choose(pick(at.x, at.y)?.id ?? null);
                 return;
             }
@@ -302,12 +357,20 @@ export function createMap(canvas, options) {
         e.preventDefault();
         const px = e.deltaMode === 1 ? e.deltaY * 16 : e.deltaY;
         grab();
-        scale(Math.exp(-px * 0.0018));
+        const at = local(e);
+        zoomAt(Math.exp(-px * 0.0018), at.x, at.y);
+    };
+    const dblclick = (e) => {
+        e.preventDefault();
+        grab();
+        const at = local(e);
+        zoomAt(e.shiftKey ? 0.5 : 2, at.x, at.y, true);
     };
     const listeners = Object.entries(on).map(([type, fn]) => [type, fn]);
     for (const [type, fn] of listeners)
         canvas.addEventListener(type, fn);
     canvas.addEventListener("wheel", wheel, { passive: false });
+    canvas.addEventListener("dblclick", dblclick);
     canvas.style.touchAction = "none";
     if (!canvas.hasAttribute("tabindex"))
         canvas.tabIndex = 0;
@@ -359,6 +422,14 @@ export function createMap(canvas, options) {
             invalidate();
         },
         zoomBy,
+        zoomAt,
+        setLabels(next, styles) {
+            labels = next;
+            if (styles)
+                labelStyles = styles;
+            invalidate();
+        },
+        placedLabels: () => placed,
         camera: () => camera,
         projection: () => projection(),
         invalidate,
@@ -370,6 +441,7 @@ export function createMap(canvas, options) {
             for (const [type, fn] of listeners)
                 canvas.removeEventListener(type, fn);
             canvas.removeEventListener("wheel", wheel);
+            canvas.removeEventListener("dblclick", dblclick);
         },
     };
 }

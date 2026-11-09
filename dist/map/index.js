@@ -12,6 +12,7 @@ export { createMap } from "./controller.js";
 export { capOf, centreOf, horizonOf, visible } from "./cull.js";
 export { coast, dragged, flight } from "./motion.js";
 export { fade, groupFills, paintMap } from "./paint.js";
+export { DEFAULT_LABEL_STYLES, canvasMeasure, inBand, labelAt, layoutLabels, paintLabels, } from "./labels.js";
 export { pickAt, pickIndex } from "./pick.js";
 export { coarsened, polygonsOf, rewound, shapesFromFeatures, shapesFromTopology, shapesOf, } from "./shapes.js";
 export { basisOf, pack, project, traceLine, traceRing } from "./trace.js";
