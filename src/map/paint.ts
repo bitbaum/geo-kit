@@ -62,19 +62,25 @@ export function fade(colour: string, a: number): string {
 }
 
 /**
- * The fills as one entry per colour, in the order the caller's map first
- * names each colour, then the features with no fill: a path per colour, not
- * per feature. As indexes, so the full and the coarse shapes share it.
+ * The fills as one entry per colour and layer: a path per colour, not per
+ * feature. Layers are painted bottom first; within one, the features with no
+ * fill come first, so a coloured feature's edge is never painted over, then
+ * each colour in the order the caller's map first names it. As indexes, so
+ * the full and the coarse shapes share it.
  */
 export function groupFills(features: readonly MapFeature<unknown>[], fills: ReadonlyMap<string, Fill>, land: Fill) {
-  const groups = new Map<Fill, number[]>();
-  for (const fill of fills.values()) if (!groups.has(fill)) groups.set(fill, []);
-  groups.set(land, groups.get(land) ?? []);
-  features.forEach((f, i) => groups.get(fills.get(f.id) ?? land)!.push(i));
-  // The plain land first, so a coloured feature's edge is never painted over.
-  const plain = groups.get(land)!;
-  groups.delete(land);
-  return [[land, plain] as [Fill, number[]], ...groups.entries()].filter(([, members]) => members.length > 0);
+  const layers = [...new Set(features.map((f) => f.layer ?? 0))].sort((a, b) => a - b);
+  const out: [Fill, number[]][] = [];
+  for (const layer of layers) {
+    const groups = new Map<Fill, number[]>();
+    groups.set(land, []);
+    for (const fill of fills.values()) if (!groups.has(fill)) groups.set(fill, []);
+    features.forEach((f, i) => {
+      if ((f.layer ?? 0) === layer) groups.get(fills.get(f.id) ?? land)!.push(i);
+    });
+    for (const entry of groups) if (entry[1].length > 0) out.push(entry);
+  }
+  return out;
 }
 
 const GRATICULE = (geoGraticule10() as MultiLineString).coordinates.map(pack);

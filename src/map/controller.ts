@@ -17,7 +17,7 @@ import type { GeoProjection } from "d3-geo";
 import { WORLD_LIMITS, clampTilt, clampZoom, disc, projectionFor, wrapLon, cameraFor, type Camera, type Limits, type View } from "./camera.ts";
 import { coast, dragged, flight, type Flight, type Spin } from "./motion.ts";
 import { groupFills, paintMap, type Fill, type Palette, type Paint } from "./paint.ts";
-import { canvasMeasure, DEFAULT_LABEL_STYLES, labelAt, layoutLabels, paintLabels, type LabelStyles, type MapLabel, type PlacedLabel } from "./labels.ts";
+import { canvasMeasure, DEFAULT_LABEL_STYLES, labelAt, layoutLabels, paintLabels, stepFades, type LabelStyles, type MapLabel, type PlacedLabel } from "./labels.ts";
 import { pickAt, pickIndex, type Pickable } from "./pick.ts";
 import type { MapFeature, MapShapes } from "./shapes.ts";
 import type { Basis } from "./trace.ts";
@@ -64,6 +64,15 @@ export interface MapOptions<P = Record<string, unknown>> {
   labels?: readonly MapLabel[];
   /** A style per label `kind`; `default` for the rest. */
   labelStyles?: LabelStyles;
+  /**
+   * Screen area per label in square pixels, the budget for how many names
+   * share the screen (default 9000); 0 lifts the cap.
+   */
+  labelDensity?: number;
+  /** Boxes on the canvas, in CSS pixels, that names must keep clear of (buttons, a legend floating over the map). */
+  labelKeepClear?: () => [number, number, number, number][];
+  /** How long a name takes to fade in or out, in ms (default 260; none under reduced motion). */
+  labelFade?: number;
   /** A label (a town's dot or a name) was tapped. Without this, a tap on a label selects the feature under it. */
   onSelectLabel?: (id: string) => void;
   /** Draw on top of the map each frame. */
@@ -133,6 +142,10 @@ export function createMap<P>(canvas: HTMLCanvasElement, options: MapOptions<P>):
   let labels: readonly MapLabel[] = options.labels ?? [];
   let labelStyles: LabelStyles = options.labelStyles ?? DEFAULT_LABEL_STYLES;
   let placed: PlacedLabel[] = [];
+  /** Names fading out: where they were last placed. */
+  const ghosts = new Map<string, PlacedLabel>();
+  const alpha = new Map<string, number>();
+  let labelsFading = false;
   let measure: ReturnType<typeof canvasMeasure> | null = null;
   let lastTap = { t: -1e9, x: 0, y: 0 };
 
@@ -193,6 +206,8 @@ export function createMap<P>(canvas: HTMLCanvasElement, options: MapOptions<P>):
     const dt = Math.min(now - (last || now), 64);
     last = now;
     const moving = advance(now, dt) || grabbed;
+    // The reader is steering (a drag, a flight, a coast), not the slow idle turn.
+    const steering = grabbed || !!motion.flight || !!motion.spin;
     let again = moving;
     if (shown && now - shown.start < FOLLOW_MS) again = true;
     if (options.animating?.(now)) again = true;
@@ -212,13 +227,38 @@ export function createMap<P>(canvas: HTMLCanvasElement, options: MapOptions<P>):
         (c, basis, p) => {
           if (labels.length > 0) {
             measure ??= canvasMeasure(c);
-            placed = layoutLabels(labels, p, camera.k, size, labelStyles, measure);
-            paintLabels(c, placed);
-          } else placed = [];
+            const before = new Map(placed.map((q) => [q.label.id, q]));
+            const [cx, cy] = p.translate();
+            placed = layoutLabels(labels, p, camera.k, size, labelStyles, measure, {
+              previous: new Set(before.keys()),
+              // While the map moves, the names on screen stay and no newcomer jumps in.
+              ...(steering ? { only: new Set(before.keys()) } : {}),
+              ...(options.labelDensity !== undefined ? { density: options.labelDensity } : {}),
+              disc: { cx, cy, r: p.scale() },
+              ...(options.labelKeepClear ? { taken: options.labelKeepClear() } : {}),
+            });
+            const now_ = new Set(placed.map((q) => q.label.id));
+            // A name that left fades where it was, unless the map moved under it.
+            for (const [id, q] of before) if (!now_.has(id) && !steering) ghosts.set(id, q);
+            for (const id of now_) ghosts.delete(id);
+            if (moving) ghosts.clear();
+            if (reducedMotion()) {
+              alpha.clear();
+              for (const id of now_) alpha.set(id, 1);
+              ghosts.clear();
+              labelsFading = false;
+            } else labelsFading = stepFades(alpha, placed, dt || 16, options.labelFade ?? 260);
+            for (const id of [...ghosts.keys()]) if (!alpha.has(id)) ghosts.delete(id);
+            paintLabels(c, [...ghosts.values(), ...placed], alpha);
+          } else {
+            placed = [];
+            labelsFading = false;
+          }
           options.over?.(c, basis, p, { now, flight: flightAt, moving, sinceTouch: now - touched });
         },
       );
     }
+    if (labelsFading) again = true;
     if (again) raf = requestAnimationFrame(tick);
     else last = 0;
   };

@@ -36,6 +36,8 @@ export {
   labelAt,
   layoutLabels,
   paintLabels,
+  stepFades,
+  type LayoutOptions,
   type LabelStyle,
   type LabelStyles,
   type MapLabel,

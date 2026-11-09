@@ -40,9 +40,11 @@ export interface Palette {
  */
 export declare function fade(colour: string, a: number): string;
 /**
- * The fills as one entry per colour, in the order the caller's map first
- * names each colour, then the features with no fill: a path per colour, not
- * per feature. As indexes, so the full and the coarse shapes share it.
+ * The fills as one entry per colour and layer: a path per colour, not per
+ * feature. Layers are painted bottom first; within one, the features with no
+ * fill come first, so a coloured feature's edge is never painted over, then
+ * each colour in the order the caller's map first names it. As indexes, so
+ * the full and the coarse shapes share it.
  */
 export declare function groupFills(features: readonly MapFeature<unknown>[], fills: ReadonlyMap<string, Fill>, land: Fill): [Fill, number[]][];
 interface Backdrop {
