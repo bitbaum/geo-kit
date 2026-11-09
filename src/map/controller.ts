@@ -17,6 +17,7 @@ import type { GeoProjection } from "d3-geo";
 import { WORLD_LIMITS, clampTilt, clampZoom, disc, projectionFor, wrapLon, cameraFor, type Camera, type Limits, type View } from "./camera.ts";
 import { coast, dragged, flight, type Flight, type Spin } from "./motion.ts";
 import { groupFills, paintMap, type Fill, type Palette, type Paint } from "./paint.ts";
+import { canvasMeasure, DEFAULT_LABEL_STYLES, labelAt, layoutLabels, paintLabels, type LabelStyles, type MapLabel, type PlacedLabel } from "./labels.ts";
 import { pickAt, pickIndex, type Pickable } from "./pick.ts";
 import type { MapFeature, MapShapes } from "./shapes.ts";
 import type { Basis } from "./trace.ts";
@@ -56,6 +57,15 @@ export interface MapOptions<P = Record<string, unknown>> {
   pickFirst?: (x: number, y: number, projection: GeoProjection, kind: "tap" | "hover") => boolean;
   /** The keyboard turned the map: the feature now facing the reader, or null. */
   onFacing?: (id: string | null) => void;
+  /**
+   * Names drawn on the map (countries, regions, towns), placed each frame so
+   * none covers another, most important first; see `labels.ts`.
+   */
+  labels?: readonly MapLabel[];
+  /** A style per label `kind`; `default` for the rest. */
+  labelStyles?: LabelStyles;
+  /** A label (a town's dot or a name) was tapped. Without this, a tap on a label selects the feature under it. */
+  onSelectLabel?: (id: string) => void;
   /** Draw on top of the map each frame. */
   over?: (ctx: CanvasRenderingContext2D, basis: Basis, projection: GeoProjection, frame: FrameInfo) => void;
   /** True while the overlay animates and needs another frame. */
@@ -76,6 +86,11 @@ export interface MapController {
   /** Go to a view at once, with no flight. */
   jumpTo(camera: Camera): void;
   zoomBy(factor: number | "home"): void;
+  /** Zoom by `factor` keeping the point under (x, y) where it is: what a wheel or a double tap does. */
+  zoomAt(factor: number, x: number, y: number, animate?: boolean): void;
+  setLabels(labels: readonly MapLabel[], styles?: LabelStyles): void;
+  /** The labels placed in the last frame, for a list or a test. */
+  placedLabels(): readonly PlacedLabel[];
   camera(): Camera;
   projection(): GeoProjection | null;
   /** Ask for a frame (the caller's overlay changed). */
@@ -115,6 +130,11 @@ export function createMap<P>(canvas: HTMLCanvasElement, options: MapOptions<P>):
   let wake = 0;
   let last = 0;
   let destroyed = false;
+  let labels: readonly MapLabel[] = options.labels ?? [];
+  let labelStyles: LabelStyles = options.labelStyles ?? DEFAULT_LABEL_STYLES;
+  let placed: PlacedLabel[] = [];
+  let measure: ReturnType<typeof canvasMeasure> | null = null;
+  let lastTap = { t: -1e9, x: 0, y: 0 };
 
   const viewAt = (now: number): View | null => {
     if (!shown) return null;
@@ -189,9 +209,14 @@ export function createMap<P>(canvas: HTMLCanvasElement, options: MapOptions<P>):
         moving ? shapes.coarse : shapes,
         paint,
         { hover: feature(hover), selected: feature(selected) },
-        options.over
-          ? (c, basis, p) => options.over!(c, basis, p, { now, flight: flightAt, moving, sinceTouch: now - touched })
-          : undefined,
+        (c, basis, p) => {
+          if (labels.length > 0) {
+            measure ??= canvasMeasure(c);
+            placed = layoutLabels(labels, p, camera.k, size, labelStyles, measure);
+            paintLabels(c, placed);
+          } else placed = [];
+          options.over?.(c, basis, p, { now, flight: flightAt, moving, sinceTouch: now - touched });
+        },
       );
     }
     if (again) raf = requestAnimationFrame(tick);
@@ -217,9 +242,32 @@ export function createMap<P>(canvas: HTMLCanvasElement, options: MapOptions<P>):
     motion = {};
     touched = performance.now();
   };
-  const scale = (factor: number) => {
-    camera = { ...camera, k: clampZoom(camera.k * factor, limits) };
-    invalidate();
+  /** The camera after zooming by `factor` about a canvas point, so the place under it stays under it. */
+  const zoomedAt = (factor: number, x: number, y: number): Camera => {
+    const view = viewAt(performance.now());
+    const k = clampZoom(camera.k * factor, limits);
+    if (!view) return { ...camera, k };
+    const before = projectionFor(view, camera).invert?.([x, y]);
+    let next: Camera = { ...camera, k };
+    if (!before) return next;
+    // Twice: on a sphere one correction leaves a small error far from the centre.
+    for (let i = 0; i < 2; i++) {
+      const after = projectionFor(view, next).invert?.([x, y]);
+      if (!after) break;
+      next = {
+        center: [wrapLon(next.center[0] + before[0] - after[0]), clampTilt(next.center[1] + before[1] - after[1], limits)],
+        k,
+      };
+    }
+    return next;
+  };
+  const zoomAt = (factor: number, x: number, y: number, animate = false) => {
+    const to = zoomedAt(factor, x, y);
+    if (animate) flyTo(to, 320);
+    else {
+      camera = to;
+      invalidate();
+    }
   };
   const zoomBy = (factor: number | "home") => {
     if (factor === "home") flyTo(home);
@@ -305,8 +353,9 @@ export function createMap<P>(canvas: HTMLCanvasElement, options: MapOptions<P>):
         if (e.pointerType === "mouse") {
           touched = performance.now();
           const taken = takenFirst(at.x, at.y, "hover");
+          const onLabel = !taken && !!options.onSelectLabel && !!labelAt(placed, at.x, at.y);
           const id = taken ? null : (pick(at.x, at.y)?.id ?? null);
-          canvas.style.cursor = taken || id ? "pointer" : "";
+          canvas.style.cursor = taken || onLabel || id ? "pointer" : "";
           if (id !== hover) {
             hover = id;
             invalidate();
@@ -335,7 +384,10 @@ export function createMap<P>(canvas: HTMLCanvasElement, options: MapOptions<P>):
         if (other) {
           const d0 = Math.hypot(before.x - other.x, before.y - other.y);
           const d1 = Math.hypot(at.x - other.x, at.y - other.y);
-          if (d0 > 0) scale(d1 / d0);
+          if (d0 > 0) {
+            camera = zoomedAt(d1 / d0, (at.x + other.x) / 2, (at.y + other.y) / 2);
+            invalidate();
+          }
         }
       }
       pointers.set(e.pointerId, at);
@@ -347,7 +399,17 @@ export function createMap<P>(canvas: HTMLCanvasElement, options: MapOptions<P>):
       const g = gesture;
       if (!g.moved) {
         const at = local(e);
-        if (!takenFirst(at.x, at.y, "tap")) choose(pick(at.x, at.y)?.id ?? null);
+        // A second tap close to the first, soon after: zoom in there (a mouse has dblclick).
+        if (e.pointerType !== "mouse" && e.timeStamp - lastTap.t < 320 && Math.hypot(at.x - lastTap.x, at.y - lastTap.y) < 32) {
+          lastTap = { t: -1e9, x: 0, y: 0 };
+          zoomAt(2, at.x, at.y, true);
+          return;
+        }
+        lastTap = { t: e.timeStamp, x: at.x, y: at.y };
+        if (takenFirst(at.x, at.y, "tap")) return;
+        const label = options.onSelectLabel ? labelAt(placed, at.x, at.y) : null;
+        if (label) options.onSelectLabel!(label.label.id);
+        else choose(pick(at.x, at.y)?.id ?? null);
         return;
       }
       const fresh = e.timeStamp - g.t < 80;
@@ -375,11 +437,19 @@ export function createMap<P>(canvas: HTMLCanvasElement, options: MapOptions<P>):
     e.preventDefault();
     const px = e.deltaMode === 1 ? e.deltaY * 16 : e.deltaY;
     grab();
-    scale(Math.exp(-px * 0.0018));
+    const at = local(e);
+    zoomAt(Math.exp(-px * 0.0018), at.x, at.y);
+  };
+  const dblclick = (e: MouseEvent) => {
+    e.preventDefault();
+    grab();
+    const at = local(e);
+    zoomAt(e.shiftKey ? 0.5 : 2, at.x, at.y, true);
   };
   const listeners: [string, EventListener][] = Object.entries(on).map(([type, fn]) => [type, fn as EventListener]);
   for (const [type, fn] of listeners) canvas.addEventListener(type, fn);
   canvas.addEventListener("wheel", wheel, { passive: false });
+  canvas.addEventListener("dblclick", dblclick);
   canvas.style.touchAction = "none";
   if (!canvas.hasAttribute("tabindex")) canvas.tabIndex = 0;
 
@@ -429,6 +499,13 @@ export function createMap<P>(canvas: HTMLCanvasElement, options: MapOptions<P>):
       invalidate();
     },
     zoomBy,
+    zoomAt,
+    setLabels(next, styles) {
+      labels = next;
+      if (styles) labelStyles = styles;
+      invalidate();
+    },
+    placedLabels: () => placed,
     camera: () => camera,
     projection: () => projection(),
     invalidate,
@@ -439,6 +516,7 @@ export function createMap<P>(canvas: HTMLCanvasElement, options: MapOptions<P>):
       window.clearTimeout(wake);
       for (const [type, fn] of listeners) canvas.removeEventListener(type, fn);
       canvas.removeEventListener("wheel", wheel);
+      canvas.removeEventListener("dblclick", dblclick);
     },
   };
 }

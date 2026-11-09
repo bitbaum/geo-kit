@@ -115,6 +115,12 @@ map.resize(390, 600);
 map.flyTo(cameraForBounds([5.96, 45.82, 10.49, 47.81], limits));
 ```
 
+- **Names.** Pass `labels` (`{ id, text, at, rank, kind, minZoom, maxZoom, dot }`)
+  and a style per `kind`; the map places them each frame without overlap, most
+  important first, and only those in their zoom band and facing the reader.
+  `onSelectLabel` makes them tappable.
+- **Zoom where you point.** Wheel and pinch zoom about the pointer; double click
+  or double tap zooms in on the spot, Shift + double click zooms out.
 - **Framework-free.** `createMap` takes a `<canvas>` and returns methods
   (`resize`, `setFills`, `setSelected`, `flyTo`, `zoomBy`, `destroy`, …); a
   React or other page wraps it in a few lines and keeps no map state of its own.

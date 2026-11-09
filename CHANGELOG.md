@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.4.0
+
+- `/map`: names on the map. `labels` (and `setLabels`) take every country,
+  region and town once, each with a rank and a zoom band; each frame places
+  those in front of the reader, most important first, so that none covers
+  another, and zooming in reveals smaller places as room appears. A town is a
+  dot with its name beside it, tried right, left, above and below.
+  `labelStyles` styles each kind (font, colour, halo, dot, uppercase,
+  tracking); `onSelectLabel` makes names and dots tappable. The layout is pure
+  (`layoutLabels`, with the text measure injected) and tested without a canvas.
+- Zoom goes where the reader points: the wheel zooms about the cursor, a
+  pinch about the fingers, and a double click or double tap zooms in on the
+  point (Shift + double click zooms out). `zoomAt` does the same from code.
+- `hoverFill` and `selectedFill` in the palette wash the whole place under the
+  pointer or selected, not only its edge.
+
 ## 0.3.0
 
 - `/map`: what a globe with its own layer needs, from moving Substrata's

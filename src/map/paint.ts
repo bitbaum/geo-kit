@@ -35,6 +35,10 @@ export interface Palette {
   limb?: [string, string];
   /** Border width in CSS pixels (default 0.6). */
   borderWidth?: number;
+  /** A wash over the feature under the pointer, so the whole place lights up, not only its edge. */
+  hoverFill?: string;
+  /** A wash over the selected feature. */
+  selectedFill?: string;
 }
 
 /**
@@ -204,11 +208,15 @@ export function paintMap<P>(
   blit(ctx, shade);
 
   const path = geoPath(proj, ctx);
-  const outline = (f: MapFeature<P> | undefined, width: number, colour: string) => {
+  const outline = (f: MapFeature<P> | undefined, width: number, colour: string, wash?: string) => {
     if (!f) return;
     const feature = { type: "Feature" as const, geometry: f.geometry, properties: null };
     ctx.beginPath();
     path(feature);
+    if (wash) {
+      ctx.fillStyle = wash;
+      ctx.fill("evenodd");
+    }
     ctx.strokeStyle = colour;
     ctx.lineWidth = width;
     ctx.stroke();
@@ -221,8 +229,8 @@ export function paintMap<P>(
       ctx.stroke();
     }
   };
-  if (marks.hover !== marks.selected) outline(marks.hover, 1.25, palette.hover);
-  outline(marks.selected, 2, palette.selected);
+  if (marks.hover !== marks.selected) outline(marks.hover, 1.25, palette.hover, palette.hoverFill);
+  outline(marks.selected, 2, palette.selected, palette.selectedFill);
 
   over?.(ctx, basis, proj);
 }

@@ -15,6 +15,7 @@
 import type { GeoProjection } from "d3-geo";
 import { type Camera, type Limits, type View } from "./camera.ts";
 import { type Fill, type Palette } from "./paint.ts";
+import { type LabelStyles, type MapLabel, type PlacedLabel } from "./labels.ts";
 import type { MapShapes } from "./shapes.ts";
 import type { Basis } from "./trace.ts";
 /** What a frame tells the caller's overlay. */
@@ -54,6 +55,15 @@ export interface MapOptions<P = Record<string, unknown>> {
     pickFirst?: (x: number, y: number, projection: GeoProjection, kind: "tap" | "hover") => boolean;
     /** The keyboard turned the map: the feature now facing the reader, or null. */
     onFacing?: (id: string | null) => void;
+    /**
+     * Names drawn on the map (countries, regions, towns), placed each frame so
+     * none covers another, most important first; see `labels.ts`.
+     */
+    labels?: readonly MapLabel[];
+    /** A style per label `kind`; `default` for the rest. */
+    labelStyles?: LabelStyles;
+    /** A label (a town's dot or a name) was tapped. Without this, a tap on a label selects the feature under it. */
+    onSelectLabel?: (id: string) => void;
     /** Draw on top of the map each frame. */
     over?: (ctx: CanvasRenderingContext2D, basis: Basis, projection: GeoProjection, frame: FrameInfo) => void;
     /** True while the overlay animates and needs another frame. */
@@ -75,6 +85,11 @@ export interface MapController {
     /** Go to a view at once, with no flight. */
     jumpTo(camera: Camera): void;
     zoomBy(factor: number | "home"): void;
+    /** Zoom by `factor` keeping the point under (x, y) where it is: what a wheel or a double tap does. */
+    zoomAt(factor: number, x: number, y: number, animate?: boolean): void;
+    setLabels(labels: readonly MapLabel[], styles?: LabelStyles): void;
+    /** The labels placed in the last frame, for a list or a test. */
+    placedLabels(): readonly PlacedLabel[];
     camera(): Camera;
     projection(): GeoProjection | null;
     /** Ask for a frame (the caller's overlay changed). */
