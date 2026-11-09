@@ -1,6 +1,10 @@
 /**
  * Names on the map: countries, regions and towns, placed so that none covers
- * another. The caller hands every candidate once with a rank (lower is more
+ * another, and few enough that the map stays a map: a density budget caps how
+ * many share the screen, each style keeps its own breathing room, nothing is
+ * drawn near the globe's limb (where text smears) or outside its disc, and a
+ * label placed last frame keeps its place against an equal newcomer, so
+ * names do not flicker as the reader moves. The caller hands every candidate once with a rank (lower is more
  * important); each frame keeps those in front of the reader and inside their
  * zoom band, and places them most important first, so zooming in reveals
  * smaller places as room appears. A town is a dot with its name beside it,
@@ -39,6 +43,12 @@ export interface LabelStyle {
   uppercase?: boolean;
   /** Extra space between letters, in pixels (canvas `letterSpacing`). */
   tracking?: number;
+  /** Free space kept around the name, in pixels (default 4); larger for quieter maps. */
+  padding?: number;
+  /** A filled box behind the name instead of a halo (a callout with a figure). */
+  box?: string;
+  /** A callout: the name set off from its dot, joined by a line of this colour. */
+  leader?: string;
 }
 
 export type LabelStyles = Record<string, LabelStyle>;
@@ -59,9 +69,27 @@ export const DEFAULT_LABEL_STYLES: LabelStyles = {
   default: { font: "500 12px system-ui, sans-serif", colour: "#1f2328", halo: "rgba(255,255,255,0.9)", haloWidth: 3 },
 };
 
-const PAD = 3;
-/** A label this far round the globe from the centre is on the far side or at the edge, where it cannot be read. */
-const FRONT = (Math.PI / 2) * 0.94;
+/** Past this angle from the centre a name is too foreshortened to read: the far side and the limb. */
+const FRONT = (Math.PI / 2) * 0.82;
+/** Keep names this far inside the canvas. */
+const EDGE = 6;
+
+export interface LayoutOptions {
+  /** Boxes already used (a legend, a card) that no label may cover. */
+  taken?: PlacedLabel["box"][];
+  /** Labels placed in the previous frame: they keep their place against an equal newcomer. */
+  previous?: ReadonlySet<string>;
+  /** Place only these (while the map moves: no newcomers until it rests). */
+  only?: ReadonlySet<string>;
+  /**
+   * Screen area per label, in square pixels: the budget for how many names
+   * share the screen (default 9000, about 100 on a laptop's map and 20 on a
+   * phone's). 0 lifts the cap.
+   */
+  density?: number;
+  /** The globe's disc; names stay inside it when it is smaller than the canvas. */
+  disc?: { cx: number; cy: number; r: number };
+}
 
 const overlaps = (a: PlacedLabel["box"], b: PlacedLabel["box"]) => a[0] < b[2] && b[0] < a[2] && a[1] < b[3] && b[1] < a[3];
 
@@ -83,16 +111,23 @@ export function layoutLabels(
   size: { w: number; h: number },
   styles: LabelStyles,
   measure: (text: string, style: LabelStyle) => { w: number; h: number },
-  taken: PlacedLabel["box"][] = [],
+  options: LayoutOptions | PlacedLabel["box"][] = {},
 ): PlacedLabel[] {
+  const o: LayoutOptions = Array.isArray(options) ? { taken: options } : options;
   const rot = projection.rotate();
   const centre: [number, number] = [-rot[0], -rot[1]];
+  const previous = o.previous ?? new Set<string>();
+  // A label shown last frame wins ties and near-ties (half a rank), so names hold still.
+  const order = (l: MapLabel) => (l.rank ?? 100) - (previous.has(l.id) ? 0.5 : 0);
   const candidates = labels
-    .filter((l) => inBand(l, k))
-    .sort((a, b) => (a.rank ?? 100) - (b.rank ?? 100) || a.text.localeCompare(b.text));
-  const boxes = [...taken];
+    .filter((l) => inBand(l, k) && (!o.only || o.only.has(l.id)))
+    .sort((a, b) => order(a) - order(b) || a.text.localeCompare(b.text));
+  const budget = (o.density ?? 9000) > 0 ? Math.max(4, Math.floor((size.w * size.h) / (o.density ?? 9000))) : Infinity;
+  const boxes = [...(o.taken ?? [])];
   const placed: PlacedLabel[] = [];
+  const inDisc = (x: number, y: number) => !o.disc || Math.hypot(x - o.disc.cx, y - o.disc.cy) <= o.disc.r * 0.96;
   for (const label of candidates) {
+    if (placed.length >= budget) break;
     if (geoDistance(centre, label.at) > FRONT) continue;
     const p = projection(label.at);
     if (!p) continue;
@@ -101,7 +136,7 @@ export function layoutLabels(
     const style = styles[label.kind ?? "default"] ?? styles.default ?? DEFAULT_LABEL_STYLES.default!;
     const text = style.uppercase ? label.text.toLocaleUpperCase() : label.text;
     const { w, h } = measure(text, style);
-    const r = label.dot ? (style.dotRadius ?? 2.5) : 0;
+    const r = label.dot ? (style.dotRadius ?? 2.5) + (style.leader ? 10 : 0) : 0;
     const tries: [number, number][] = label.dot
       ? [
           [px + r + 4 + w / 2, py],
@@ -110,9 +145,11 @@ export function layoutLabels(
           [px, py + r + 3 + h / 2],
         ]
       : [[px, py]];
+    const pad = style.padding ?? 4;
     for (const [x, y] of tries) {
-      const box: PlacedLabel["box"] = [x - w / 2 - PAD, y - h / 2 - PAD, x + w / 2 + PAD, y + h / 2 + PAD];
-      if (box[0] < 0 || box[2] > size.w || box[1] < 0 || box[3] > size.h) continue;
+      const box: PlacedLabel["box"] = [x - w / 2 - pad, y - h / 2 - pad, x + w / 2 + pad, y + h / 2 + pad];
+      if (box[0] < EDGE || box[2] > size.w - EDGE || box[1] < EDGE || box[3] > size.h - EDGE) continue;
+      if (!inDisc(x - w / 2, y - h / 2) || !inDisc(x + w / 2, y + h / 2) || !inDisc(x - w / 2, y + h / 2) || !inDisc(x + w / 2, y - h / 2)) continue;
       const dotBox: PlacedLabel["box"] | null = label.dot ? [px - r - 1, py - r - 1, px + r + 1, py + r + 1] : null;
       if (boxes.some((b) => overlaps(b, box) || (dotBox !== null && overlaps(b, dotBox)))) continue;
       boxes.push(box);
@@ -124,11 +161,24 @@ export function layoutLabels(
   return placed;
 }
 
-/** Draw placed labels: dots first, then each name over a halo. */
-export function paintLabels(ctx: CanvasRenderingContext2D, placed: readonly PlacedLabel[]) {
+/**
+ * Draw placed labels: dots first, then each name over its halo or box.
+ * `alpha` (per label id, 0–1) fades a name in or out; absent draws it whole.
+ */
+export function paintLabels(ctx: CanvasRenderingContext2D, placed: readonly PlacedLabel[], alpha?: ReadonlyMap<string, number>) {
+  const a = (p: PlacedLabel) => alpha?.get(p.label.id) ?? 1;
   ctx.save();
   for (const p of placed) {
-    if (!p.dot) continue;
+    if (!p.dot || a(p) <= 0) continue;
+    ctx.globalAlpha = a(p);
+    if (p.style.leader) {
+      ctx.beginPath();
+      ctx.moveTo(p.dot[0], p.dot[1]);
+      ctx.lineTo(p.x < p.dot[0] ? p.box[2] : p.box[0], p.y);
+      ctx.strokeStyle = p.style.leader;
+      ctx.lineWidth = 1;
+      ctx.stroke();
+    }
     ctx.beginPath();
     ctx.arc(p.dot[0], p.dot[1], p.style.dotRadius ?? 2.5, 0, Math.PI * 2);
     ctx.fillStyle = p.style.dot ?? p.style.colour;
@@ -141,15 +191,49 @@ export function paintLabels(ctx: CanvasRenderingContext2D, placed: readonly Plac
   ctx.textBaseline = "middle";
   ctx.lineJoin = "round";
   for (const p of placed) {
+    if (a(p) <= 0) continue;
+    ctx.globalAlpha = a(p);
     ctx.font = p.style.font;
     if ("letterSpacing" in ctx) (ctx as unknown as { letterSpacing: string }).letterSpacing = `${p.style.tracking ?? 0}px`;
-    ctx.lineWidth = p.style.haloWidth ?? 3;
-    ctx.strokeStyle = p.style.halo;
-    ctx.strokeText(p.text, p.x, p.y);
+    if (p.style.box) {
+      const pad = Math.min(p.style.padding ?? 4, 5);
+      ctx.fillStyle = p.style.box;
+      ctx.fillRect(p.box[0] + (p.style.padding ?? 4) - pad, p.box[1] + (p.style.padding ?? 4) - pad, p.box[2] - p.box[0] - 2 * ((p.style.padding ?? 4) - pad), p.box[3] - p.box[1] - 2 * ((p.style.padding ?? 4) - pad));
+    } else {
+      ctx.lineWidth = p.style.haloWidth ?? 3;
+      ctx.strokeStyle = p.style.halo;
+      ctx.strokeText(p.text, p.x, p.y);
+    }
     ctx.fillStyle = p.style.colour;
     ctx.fillText(p.text, p.x, p.y);
   }
   ctx.restore();
+}
+
+/**
+ * How far each label has faded in, moved toward 1 for those placed and 0 for
+ * the rest by `dt / duration`. Returns true while any is still fading.
+ */
+export function stepFades(alpha: Map<string, number>, placed: readonly PlacedLabel[], dt: number, duration = 260): boolean {
+  const shown = new Set(placed.map((p) => p.label.id));
+  const step = duration > 0 ? dt / duration : 1;
+  let fading = false;
+  for (const id of shown) {
+    const was = alpha.get(id) ?? 0;
+    const next = Math.min(1, was + step);
+    alpha.set(id, next);
+    if (next < 1) fading = true;
+  }
+  for (const [id, was] of alpha) {
+    if (shown.has(id)) continue;
+    const next = was - step;
+    if (next <= 0) alpha.delete(id);
+    else {
+      alpha.set(id, next);
+      fading = true;
+    }
+  }
+  return fading;
 }
 
 /** The label under a point, if any: its name or its dot. */

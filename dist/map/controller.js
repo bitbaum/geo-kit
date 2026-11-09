@@ -1,7 +1,7 @@
 import { WORLD_LIMITS, clampTilt, clampZoom, disc, projectionFor, wrapLon, cameraFor } from "./camera.js";
 import { coast, dragged, flight } from "./motion.js";
 import { groupFills, paintMap } from "./paint.js";
-import { canvasMeasure, DEFAULT_LABEL_STYLES, labelAt, layoutLabels, paintLabels } from "./labels.js";
+import { canvasMeasure, DEFAULT_LABEL_STYLES, labelAt, layoutLabels, paintLabels, stepFades } from "./labels.js";
 import { pickAt, pickIndex } from "./pick.js";
 const IDLE_BEFORE_TURNING = 4000;
 const STOP_TURNING_AFTER = 120_000;
@@ -35,6 +35,10 @@ export function createMap(canvas, options) {
     let labels = options.labels ?? [];
     let labelStyles = options.labelStyles ?? DEFAULT_LABEL_STYLES;
     let placed = [];
+    /** Names fading out: where they were last placed. */
+    const ghosts = new Map();
+    const alpha = new Map();
+    let labelsFading = false;
     let measure = null;
     let lastTap = { t: -1e9, x: 0, y: 0 };
     const viewAt = (now) => {
@@ -97,6 +101,8 @@ export function createMap(canvas, options) {
         const dt = Math.min(now - (last || now), 64);
         last = now;
         const moving = advance(now, dt) || grabbed;
+        // The reader is steering (a drag, a flight, a coast), not the slow idle turn.
+        const steering = grabbed || !!motion.flight || !!motion.spin;
         let again = moving;
         if (shown && now - shown.start < FOLLOW_MS)
             again = true;
@@ -111,14 +117,48 @@ export function createMap(canvas, options) {
             paintMap(ctx, size, proj, moving ? shapes.coarse : shapes, paint, { hover: feature(hover), selected: feature(selected) }, (c, basis, p) => {
                 if (labels.length > 0) {
                     measure ??= canvasMeasure(c);
-                    placed = layoutLabels(labels, p, camera.k, size, labelStyles, measure);
-                    paintLabels(c, placed);
+                    const before = new Map(placed.map((q) => [q.label.id, q]));
+                    const [cx, cy] = p.translate();
+                    placed = layoutLabels(labels, p, camera.k, size, labelStyles, measure, {
+                        previous: new Set(before.keys()),
+                        // While the map moves, the names on screen stay and no newcomer jumps in.
+                        ...(steering ? { only: new Set(before.keys()) } : {}),
+                        ...(options.labelDensity !== undefined ? { density: options.labelDensity } : {}),
+                        disc: { cx, cy, r: p.scale() },
+                        ...(options.labelKeepClear ? { taken: options.labelKeepClear() } : {}),
+                    });
+                    const now_ = new Set(placed.map((q) => q.label.id));
+                    // A name that left fades where it was, unless the map moved under it.
+                    for (const [id, q] of before)
+                        if (!now_.has(id) && !steering)
+                            ghosts.set(id, q);
+                    for (const id of now_)
+                        ghosts.delete(id);
+                    if (moving)
+                        ghosts.clear();
+                    if (reducedMotion()) {
+                        alpha.clear();
+                        for (const id of now_)
+                            alpha.set(id, 1);
+                        ghosts.clear();
+                        labelsFading = false;
+                    }
+                    else
+                        labelsFading = stepFades(alpha, placed, dt || 16, options.labelFade ?? 260);
+                    for (const id of [...ghosts.keys()])
+                        if (!alpha.has(id))
+                            ghosts.delete(id);
+                    paintLabels(c, [...ghosts.values(), ...placed], alpha);
                 }
-                else
+                else {
                     placed = [];
+                    labelsFading = false;
+                }
                 options.over?.(c, basis, p, { now, flight: flightAt, moving, sinceTouch: now - touched });
             });
         }
+        if (labelsFading)
+            again = true;
         if (again)
             raf = requestAnimationFrame(tick);
         else

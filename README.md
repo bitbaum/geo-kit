@@ -118,7 +118,10 @@ map.flyTo(cameraForBounds([5.96, 45.82, 10.49, 47.81], limits));
 - **Names.** Pass `labels` (`{ id, text, at, rank, kind, minZoom, maxZoom, dot }`)
   and a style per `kind`; the map places them each frame without overlap, most
   important first, and only those in their zoom band and facing the reader.
-  `onSelectLabel` makes them tappable.
+  `onSelectLabel` makes them tappable. A density budget, per-style padding, globe-aware
+  culling, stable placement and fades keep it calm; `box` and `leader` make callouts.
+- **Layers.** Give a feature that lies over another (a province over its country) a higher
+  `layer`; layers are painted in order and never merged into one path.
 - **Zoom where you point.** Wheel and pinch zoom about the pointer; double click
   or double tap zooms in on the spot, Shift + double click zooms out.
 - **Framework-free.** `createMap` takes a `<canvas>` and returns methods

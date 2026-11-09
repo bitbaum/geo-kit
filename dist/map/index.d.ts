@@ -12,7 +12,7 @@ export { createMap, type FrameInfo, type MapController, type MapOptions } from "
 export { capOf, centreOf, horizonOf, visible, type Cap } from "./cull.ts";
 export { coast, dragged, flight, type Flight, type Spin } from "./motion.ts";
 export { fade, groupFills, paintMap, type DrawOver, type Fill, type Marks, type Paint, type Palette } from "./paint.ts";
-export { DEFAULT_LABEL_STYLES, canvasMeasure, inBand, labelAt, layoutLabels, paintLabels, type LabelStyle, type LabelStyles, type MapLabel, type PlacedLabel, } from "./labels.ts";
+export { DEFAULT_LABEL_STYLES, canvasMeasure, inBand, labelAt, layoutLabels, paintLabels, stepFades, type LayoutOptions, type LabelStyle, type LabelStyles, type MapLabel, type PlacedLabel, } from "./labels.ts";
 export { pickAt, pickIndex, type Pickable } from "./pick.ts";
 export { coarsened, polygonsOf, rewound, shapesFromFeatures, shapesFromTopology, shapesOf, type MapFeature, type MapShapes, type Shapes, type TopologyOptions, } from "./shapes.ts";
 export { basisOf, pack, project, traceLine, traceRing, type Basis, type Packed } from "./trace.ts";

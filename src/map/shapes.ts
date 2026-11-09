@@ -22,6 +22,13 @@ export interface MapFeature<P = Record<string, unknown>> {
   id: string;
   geometry: Geometry;
   properties: P;
+  /**
+   * Which layer it is painted on (default 0). A feature that lies over
+   * another (a province over its country) goes on a higher layer: each layer
+   * is painted after the one below and never shares a path with it, where
+   * overlapping shapes would cancel each other out.
+   */
+  layer?: number;
 }
 
 export interface Shapes<P = Record<string, unknown>> {

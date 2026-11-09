@@ -62,6 +62,15 @@ export interface MapOptions<P = Record<string, unknown>> {
     labels?: readonly MapLabel[];
     /** A style per label `kind`; `default` for the rest. */
     labelStyles?: LabelStyles;
+    /**
+     * Screen area per label in square pixels, the budget for how many names
+     * share the screen (default 9000); 0 lifts the cap.
+     */
+    labelDensity?: number;
+    /** Boxes on the canvas, in CSS pixels, that names must keep clear of (buttons, a legend floating over the map). */
+    labelKeepClear?: () => [number, number, number, number][];
+    /** How long a name takes to fade in or out, in ms (default 260; none under reduced motion). */
+    labelFade?: number;
     /** A label (a town's dot or a name) was tapped. Without this, a tap on a label selects the feature under it. */
     onSelectLabel?: (id: string) => void;
     /** Draw on top of the map each frame. */

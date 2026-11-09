@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.5.0
+
+- Labels that read like an atlas, not a wall of names:
+  - **A density budget** (`labelDensity`, default one name per 9,000 px²) caps how many names
+    share the screen, most important first.
+  - **Breathing room per style** (`padding`, default 4 px).
+  - **Globe-aware**: nothing within 18° of the limb, where text smears, and nothing outside the
+    globe's disc or within 6 px of the canvas edge.
+  - **Steady**: a name shown last frame keeps its place against an equal newcomer, and while
+    the reader drags, flies or coasts no newcomer jumps in. Names fade in and out (`labelFade`,
+    default 260 ms; instant under reduced motion).
+  - **Keep clear**: `labelKeepClear` returns boxes (buttons, a legend) names stay out of.
+  - **Callouts**: a style with `box` draws the name on a filled box instead of a halo, and with
+    `leader` sets it off from its dot, joined by a line, for a figure beside a country.
+- **Layers**: a `MapFeature` can carry `layer`. Features on a higher layer (a province over its
+  country) are painted after the ones below and never share a path with them, where
+  overlapping shapes cancelled each other out under the even-odd rule and drew land as sea.
+
 ## 0.4.0
 
 - `/map`: names on the map. `labels` (and `setLabels`) take every country,
