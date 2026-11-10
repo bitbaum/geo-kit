@@ -14,6 +14,6 @@ export { capOf, centreOf, horizonOf, visible } from "./cull.js";
 export { coast, dragged, flight } from "./motion.js";
 export { fade, groupFills, hatch, paintMap } from "./paint.js";
 export { DEFAULT_LABEL_STYLES, canvasMeasure, inBand, labelAt, layoutLabels, paintLabels, stepFades, } from "./labels.js";
-export { pickAt, pickIndex } from "./pick.js";
+export { pickAllAt, pickAt, pickIndex } from "./pick.js";
 export { coarsened, polygonsOf, rewound, shapesFromFeatures, shapesFromTopology, shapesOf, } from "./shapes.js";
 export { basisOf, pack, project, traceLine, traceRing } from "./trace.js";
