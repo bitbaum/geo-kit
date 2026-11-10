@@ -47,7 +47,7 @@ Ruled out, each by a test in `test/pick.test.ts` or by reading the code:
 - **TopoJSON**: neighbours that share an arc cannot disagree about their shared
   border. This is why one source per view is the real cure for borders that do
   not meet; the kit cannot repair two sources, only stop painting the coarse one's
-  border over the fine one (a separate change).
+  border over the fine one (see the end).
 - **Flatbush** (a static packed Hilbert R-tree), **PMTiles** and vector tiles,
   **geoBoundaries** (CC BY 4.0 boundaries by country) and OSM boundaries are
   sources and indexes the app may use; none changes the kit's picking rule.
@@ -69,3 +69,18 @@ Ruled out, each by a test in `test/pick.test.ts` or by reading the code:
    point; a grid over the boxes (next release) keeps that to a handful of
    candidates for thousands of communes.
 6. **Colour-id picking** only if measurements justify it. They do not today.
+
+## Paint follows the same layers
+
+Borders used to be stroked in one pass over every fill, so a coarse neighbour's
+50m outline ran across the fine places drawn over it. They are now stroked layer
+by layer, each after its own fills (`Shapes.lineLayers`), so a layer over another
+covers the lines under it. This hides the symptom only where the upper layer's
+fill is opaque and covers the area; it does not make two sources agree. One
+source per view (shared TopoJSON arcs) is the cure; where an app mixes sources,
+it should leave the coarse feature out once the fine places are drawn, as Solon
+does for the open country's own outline.
+
+`test/visual.test.ts` paints the fixtures with Skia and compares them with
+baselines in `test/visual`: a wrong pick moves the highlight, and a coarse
+border stroked across a place fails the border check.

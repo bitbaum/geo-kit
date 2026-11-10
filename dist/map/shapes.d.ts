@@ -25,6 +25,12 @@ export interface Shapes<P = Record<string, unknown>> {
     lineCaps: Cap[];
     rings: Packed[][];
     lines: Packed[];
+    /**
+     * The layer each border line belongs to, parallel to `lines`: a line is
+     * stroked after the fills of its own layer, so a layer over another
+     * covers the lines under it. A topology's shared borders are all layer 0.
+     */
+    lineLayers: number[];
 }
 /** The full detail and the coarse copy painted in motion. */
 export interface MapShapes<P = Record<string, unknown>> extends Shapes<P> {
@@ -41,7 +47,7 @@ export declare function polygonsOf(g: Geometry): Ring[][];
  */
 export declare function rewound(g: Geometry): Geometry;
 /** Prepare features and their shared borders for painting. */
-export declare function shapesOf<P>(features: readonly MapFeature<P>[], borders: MultiLineString): Shapes<P>;
+export declare function shapesOf<P>(features: readonly MapFeature<P>[], borders: MultiLineString, lineLayers?: readonly number[]): Shapes<P>;
 /**
  * Every `every`-th vertex of each arc, ends kept. Thinning the topology's arcs
  * rather than each feature's rings keeps a shared border shared: neighbours

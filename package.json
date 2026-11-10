@@ -1,6 +1,6 @@
 {
   "name": "@bitbaum/geo-kit",
-  "version": "0.7.0",
+  "version": "0.8.0",
   "description": "Versioned, on-demand geography resources and sourced boundary assertions for web applications, and a Canvas 2D renderer for them (globe or map).",
   "author": "BitBaum",
   "homepage": "https://github.com/bitbaum/geo-kit#readme",
@@ -61,12 +61,15 @@
     }
   },
   "devDependencies": {
+    "@napi-rs/canvas": "^1.1.0",
     "@types/d3-geo": "^3.1.1",
     "@types/geojson": "^7946.0.16",
     "@types/node": "^22.0.0",
+    "@types/pngjs": "^6.0.5",
     "@types/topojson-client": "^3.1.5",
     "@types/topojson-specification": "^1.0.5",
     "d3-geo": "3.1.1",
+    "pngjs": "^7.0.0",
     "topojson-client": "3.1.0",
     "typescript": "^5.8.0",
     "world-atlas": "2.0.2"
