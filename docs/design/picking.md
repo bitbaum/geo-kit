@@ -65,10 +65,16 @@ Ruled out, each by a test in `test/pick.test.ts` or by reading the code:
 4. **Contested and disputed land stays pickable.** Two claimants on one layer
    both hold the point; `pickAt` returns the smaller, `pickAllAt` returns both,
    so an app can say "claimed by A and B" rather than choose silently.
-5. **Scale.** `geoContains` runs only for features whose lon/lat box holds the
-   point; a grid over the boxes (next release) keeps that to a handful of
-   candidates for thousands of communes.
-6. **Colour-id picking** only if measurements justify it. They do not today.
+5. **Scale, measured.** `geoContains` runs only for features whose lon/lat box holds
+   the point. `scripts/bench-pick.ts` (the 10m world plus a tiling of small
+   communes on layer 3, on one development machine): a tap takes 1.4 ms with
+   4,255 features and 1.6 ms with 40,255, index build 0.2 to 0.4 s. A grid over the
+   boxes was tried and halves that at 40,000 features and changes nothing at 4,000:
+   the time is `geoContains` on the big detailed countries, not the box scan. No
+   country has anything like 40,000 communes, so there is no index. Revisit when a
+   tap is slower than a frame at the sizes an app really loads.
+6. **Colour-id picking** only if measurements justify it. They do not today: a tap is
+   about a millisecond.
 
 ## Paint follows the same layers
 
