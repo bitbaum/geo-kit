@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.8.0
+
+- **Borders are stroked layer by layer.** Each layer's fills are painted, then its own border
+  lines, so a layer over another covers the lines under it. Before, every border was stroked in
+  one pass over every fill, and a coarse country's outline (Natural Earth 1:50m, kilometres off)
+  ran across the fine places drawn over it: Russia's across Narva, the German/Polish border across
+  Görlitz. A map with one layer paints exactly as before. `Shapes` gains `lineLayers`;
+  `shapesOf` takes it as an optional third argument, `shapesFromFeatures` fills it from each
+  feature's `layer`.
+- Picture tests (`test/visual.test.ts`, baselines in `test/visual`, rendered in process with Skia):
+  the five border fixtures painted as Solon paints them, the picked place highlighted, and a
+  check that no coarse border pixel inside a fine place is stroked over it.
+
 ## 0.7.0
 
 - **Fix: a tap picks the place drawn on top.** `pickAt` walked the features in array order and

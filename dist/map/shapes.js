@@ -2,7 +2,7 @@
  * What a map draws, prepared once: each feature keyed by its id, wound the
  * way d3's spherical geometry needs, its far-side cap (cull.ts) and its rings
  * as unit vectors (trace.ts); every shared border once, so the outline is one
- * stroke, not one per feature. A coarse copy, the same features in the same
+ * stroke per layer, not one per feature. A coarse copy, the same features in the same
  * order, is painted while the map moves so a drag stays inside a phone's
  * frame budget; the frame after it stops is full detail again.
  *
@@ -39,7 +39,7 @@ export function rewound(g) {
     return g;
 }
 /** Prepare features and their shared borders for painting. */
-export function shapesOf(features, borders) {
+export function shapesOf(features, borders, lineLayers = []) {
     const kept = features.map((f) => ({ ...f, geometry: rewound(f.geometry) }));
     return {
         features: kept,
@@ -49,6 +49,7 @@ export function shapesOf(features, borders) {
         lineCaps: borders.coordinates.map((line) => capOf({ type: "LineString", coordinates: line })),
         rings: kept.map((f) => polygonsOf(f.geometry).flat().map(pack)),
         lines: borders.coordinates.map(pack),
+        lineLayers: borders.coordinates.map((_, i) => lineLayers[i] ?? 0),
     };
 }
 /**
@@ -96,10 +97,8 @@ export function shapesFromTopology(topo, options) {
  * collection carries no shared arcs). Painted in motion as they are.
  */
 export function shapesFromFeatures(features) {
-    const borders = {
-        type: "MultiLineString",
-        coordinates: features.flatMap((f) => polygonsOf(f.geometry).flat()),
-    };
-    const shapes = shapesOf(features, borders);
+    const lines = features.flatMap((f) => polygonsOf(f.geometry).flat().map((ring) => ({ ring, layer: f.layer ?? 0 })));
+    const borders = { type: "MultiLineString", coordinates: lines.map((l) => l.ring) };
+    const shapes = shapesOf(features, borders, lines.map((l) => l.layer));
     return { ...shapes, coarse: shapes };
 }

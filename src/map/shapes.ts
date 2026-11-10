@@ -2,7 +2,7 @@
  * What a map draws, prepared once: each feature keyed by its id, wound the
  * way d3's spherical geometry needs, its far-side cap (cull.ts) and its rings
  * as unit vectors (trace.ts); every shared border once, so the outline is one
- * stroke, not one per feature. A coarse copy, the same features in the same
+ * stroke per layer, not one per feature. A coarse copy, the same features in the same
  * order, is painted while the map moves so a drag stays inside a phone's
  * frame budget; the frame after it stops is full detail again.
  *
@@ -41,6 +41,12 @@ export interface Shapes<P = Record<string, unknown>> {
   lineCaps: Cap[];
   rings: Packed[][];
   lines: Packed[];
+  /**
+   * The layer each border line belongs to, parallel to `lines`: a line is
+   * stroked after the fills of its own layer, so a layer over another
+   * covers the lines under it. A topology's shared borders are all layer 0.
+   */
+  lineLayers: number[];
 }
 
 /** The full detail and the coarse copy painted in motion. */
@@ -74,7 +80,11 @@ export function rewound(g: Geometry): Geometry {
 }
 
 /** Prepare features and their shared borders for painting. */
-export function shapesOf<P>(features: readonly MapFeature<P>[], borders: MultiLineString): Shapes<P> {
+export function shapesOf<P>(
+  features: readonly MapFeature<P>[],
+  borders: MultiLineString,
+  lineLayers: readonly number[] = [],
+): Shapes<P> {
   const kept = features.map((f) => ({ ...f, geometry: rewound(f.geometry) }));
   return {
     features: kept,
@@ -84,6 +94,7 @@ export function shapesOf<P>(features: readonly MapFeature<P>[], borders: MultiLi
     lineCaps: borders.coordinates.map((line) => capOf({ type: "LineString", coordinates: line })),
     rings: kept.map((f) => polygonsOf(f.geometry).flat().map(pack)),
     lines: borders.coordinates.map(pack),
+    lineLayers: borders.coordinates.map((_, i) => lineLayers[i] ?? 0),
   };
 }
 
@@ -146,10 +157,8 @@ export function shapesFromTopology<P extends GeoJsonProperties>(
  * collection carries no shared arcs). Painted in motion as they are.
  */
 export function shapesFromFeatures<P>(features: readonly MapFeature<P>[]): MapShapes<P> {
-  const borders: MultiLineString = {
-    type: "MultiLineString",
-    coordinates: features.flatMap((f) => polygonsOf(f.geometry).flat()),
-  };
-  const shapes = shapesOf(features, borders);
+  const lines = features.flatMap((f) => polygonsOf(f.geometry).flat().map((ring) => ({ ring, layer: f.layer ?? 0 })));
+  const borders: MultiLineString = { type: "MultiLineString", coordinates: lines.map((l) => l.ring) };
+  const shapes = shapesOf(features, borders, lines.map((l) => l.layer));
   return { ...shapes, coarse: shapes };
 }

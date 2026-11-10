@@ -226,21 +226,28 @@ export function paintMap<P>(
     ctx.stroke();
   }
 
-  for (const [fill, members] of groups) {
+  // Layer by layer, each layer's fills and then its borders: a layer over another covers the
+  // lines under it, so a coarse neighbour's outline never runs across the fine places drawn over it.
+  const layerOf = (members: number[]) => shapes.features[members[0]!]?.layer ?? 0;
+  const layers = [...new Set([...groups.map(([, members]) => layerOf(members)), ...shapes.lineLayers])].sort((a, b) => a - b);
+  for (const layer of layers) {
+    for (const [fill, members] of groups) {
+      if (layerOf(members) !== layer) continue;
+      ctx.beginPath();
+      for (const i of members)
+        if (visible(shapes.caps[i]!, centre, horizon)) for (const ring of shapes.rings[i]!) traceRing(ctx, ring, basis);
+      ctx.fillStyle = fill;
+      ctx.fill("evenodd");
+    }
     ctx.beginPath();
-    for (const i of members)
-      if (visible(shapes.caps[i]!, centre, horizon)) for (const ring of shapes.rings[i]!) traceRing(ctx, ring, basis);
-    ctx.fillStyle = fill;
-    ctx.fill("evenodd");
+    shapes.lines.forEach((line, i) => {
+      if (shapes.lineLayers[i] === layer && visible(shapes.lineCaps[i]!, centre, horizon)) traceLine(ctx, line, basis);
+    });
+    ctx.strokeStyle = palette.border;
+    ctx.lineWidth = palette.borderWidth ?? 0.6;
+    ctx.lineJoin = "round";
+    ctx.stroke();
   }
-  ctx.beginPath();
-  shapes.lines.forEach((line, i) => {
-    if (visible(shapes.lineCaps[i]!, centre, horizon)) traceLine(ctx, line, basis);
-  });
-  ctx.strokeStyle = palette.border;
-  ctx.lineWidth = palette.borderWidth ?? 0.6;
-  ctx.lineJoin = "round";
-  ctx.stroke();
 
   blit(ctx, shade);
 
