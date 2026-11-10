@@ -40,6 +40,18 @@ export interface Palette {
  */
 export declare function fade(colour: string, a: number): string;
 /**
+ * A diagonal hatch as a fill, for land more than one authority claims: the
+ * colour says where, the hatch says that it is not settled, so colour is never
+ * the only carrier. `stripe` is the line colour, `gap` the pixels between
+ * lines (default 6), `width` the line width (default 1.5). Null where there is
+ * no canvas to make a pattern with (a server).
+ */
+export declare function hatch(stripe: string, { gap, width, background }?: {
+    gap?: number;
+    width?: number;
+    background?: string;
+}): CanvasPattern | null;
+/**
  * The fills as one entry per colour and layer: a path per colour, not per
  * feature. Layers are painted bottom first; within one, the features with no
  * fill come first, so a coloured feature's edge is never painted over, then

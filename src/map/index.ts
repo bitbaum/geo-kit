@@ -25,10 +25,18 @@ export {
   type Limits,
   type View,
 } from "./camera.ts";
+export {
+  choose,
+  createFocus,
+  up,
+  type FocusController,
+  type FocusTree,
+  type FocusView,
+} from "./focus.ts";
 export { createMap, type FrameInfo, type MapController, type MapOptions } from "./controller.ts";
 export { capOf, centreOf, horizonOf, visible, type Cap } from "./cull.ts";
 export { coast, dragged, flight, type Flight, type Spin } from "./motion.ts";
-export { fade, groupFills, paintMap, type DrawOver, type Fill, type Marks, type Paint, type Palette } from "./paint.ts";
+export { fade, groupFills, hatch, paintMap, type DrawOver, type Fill, type Marks, type Paint, type Palette } from "./paint.ts";
 export {
   DEFAULT_LABEL_STYLES,
   canvasMeasure,

@@ -31,6 +31,38 @@ export function fade(colour, a) {
     return rgba ? `rgba(${rgba[1]},${rgba[2]},${rgba[3]},${a})` : colour;
 }
 /**
+ * A diagonal hatch as a fill, for land more than one authority claims: the
+ * colour says where, the hatch says that it is not settled, so colour is never
+ * the only carrier. `stripe` is the line colour, `gap` the pixels between
+ * lines (default 6), `width` the line width (default 1.5). Null where there is
+ * no canvas to make a pattern with (a server).
+ */
+export function hatch(stripe, { gap = 6, width = 1.5, background } = {}) {
+    if (typeof document === "undefined")
+        return null;
+    const tile = document.createElement("canvas");
+    tile.width = tile.height = gap;
+    const ctx = tile.getContext("2d");
+    if (!ctx)
+        return null;
+    if (background) {
+        ctx.fillStyle = background;
+        ctx.fillRect(0, 0, gap, gap);
+    }
+    ctx.strokeStyle = stripe;
+    ctx.lineWidth = width;
+    ctx.beginPath();
+    // Three segments, so the stripe is unbroken across the tile's edges.
+    ctx.moveTo(-1, gap + 1);
+    ctx.lineTo(gap + 1, -1);
+    ctx.moveTo(-1, 1);
+    ctx.lineTo(1, -1);
+    ctx.moveTo(gap - 1, gap + 1);
+    ctx.lineTo(gap + 1, gap - 1);
+    ctx.stroke();
+    return ctx.createPattern(tile, "repeat");
+}
+/**
  * The fills as one entry per colour and layer: a path per colour, not per
  * feature. Layers are painted bottom first; within one, the features with no
  * fill come first, so a coloured feature's edge is never painted over, then

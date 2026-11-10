@@ -144,6 +144,35 @@ map.flyTo(cameraForBounds([5.96, 45.82, 10.49, 47.81], limits));
 - **Pure parts.** The camera, motion, culling, picking and the fast
   projection are exported and tested without a browser.
 
+### Which place the map is about: `createFocus`
+
+A map of places (a country, its provinces, their districts) needs one rule, kept in one place:
+choosing a place selects it, frames **its own outline**, draws its children as the tappable
+places with its own outline whole, and shows the places above it faintly. It never frames from a
+child's bounds, and nothing jumps to a child that was not chosen.
+
+```ts
+import { createFocus } from "@bitbaum/geo-kit/map";
+
+const focus = createFocus(
+  {
+    cameraOf: (id) => outlineCameraOf(id), // cameraFor(its geometry), or null when none is drawn
+    childrenOf: (id) => idsInside(id),
+    parentOf: (id) => idAbove(id),
+    home: { center: [8, 40], k: 1 },
+  },
+  (view) => {
+    if (view.camera) map.flyTo(view.camera);
+    map.setSelected(view.selected);
+    // draw view.outline and view.children; view.context faintly; the card says "Open <view.selected>"
+  },
+);
+focus.choose("some-place"); // a tap, a search result, a link
+focus.up();
+```
+
+`hatch(stripe)` makes a fill for land more than one authority claims.
+
 ## Assertions and proposed boundaries
 
 `AreaAssertion` follows Solon's sourced `claims`, `administers`, and `proposes`
