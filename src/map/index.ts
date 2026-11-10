@@ -51,7 +51,7 @@ export {
   type MapLabel,
   type PlacedLabel,
 } from "./labels.ts";
-export { pickAt, pickIndex, type Pickable } from "./pick.ts";
+export { pickAllAt, pickAt, pickIndex, type Pickable } from "./pick.ts";
 export {
   coarsened,
   polygonsOf,

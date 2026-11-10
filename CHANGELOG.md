@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.7.0
+
+- **Fix: a tap picks the place drawn on top.** `pickAt` walked the features in array order and
+  ignored `layer`, so a coarse country listed first took every tap inside a fine place drawn over
+  it (Solon: a tap inside Narva selected Russia). The index is now topmost first: highest `layer`,
+  then smallest area, then listed last. See `docs/design/picking.md`.
+- **`pickAllAt(index, projection, x, y)`**: every feature under the pixel, topmost first (the
+  commune, its province, its country; each claimant of contested land), empty over the sea.
+- `Pickable` now carries `layer` and `area`.
+
 ## 0.6.0
 
 - **`createFocus` / `choose` / `up`** (`/map`): which place a map is about, as one pure state

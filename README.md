@@ -141,6 +141,11 @@ map.flyTo(cameraForBounds([5.96, 45.82, 10.49, 47.81], limits));
   picture are the same painter. `over` draws the caller's own layer (sites,
   routes, figures) on top each frame, with the frame's projection, and
   `pickFirst` lets that layer take a tap or a hover before the features.
+- **Picking is top-down.** A tap picks the feature on the highest `layer` that holds the point
+  (a commune over its country), the smallest area on one layer, so coarse Natural Earth countries
+  never take a tap inside a fine place drawn over them. `pickAllAt` returns the whole stack,
+  topmost first, for contested land and for a country > state > county > town chain. See
+  `docs/design/picking.md`.
 - **Pure parts.** The camera, motion, culling, picking and the fast
   projection are exported and tested without a browser.
 
