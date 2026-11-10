@@ -8,10 +8,11 @@
  * `topojson-client`.
  */
 export { WORLD_LIMITS, cameraFor, cameraForBounds, clampTilt, clampZoom, disc, focusOf, mainland, projectionFor, rotationOf, wrapLon, zoomFor, } from "./camera.js";
+export { choose, createFocus, up, } from "./focus.js";
 export { createMap } from "./controller.js";
 export { capOf, centreOf, horizonOf, visible } from "./cull.js";
 export { coast, dragged, flight } from "./motion.js";
-export { fade, groupFills, paintMap } from "./paint.js";
+export { fade, groupFills, hatch, paintMap } from "./paint.js";
 export { DEFAULT_LABEL_STYLES, canvasMeasure, inBand, labelAt, layoutLabels, paintLabels, stepFades, } from "./labels.js";
 export { pickAt, pickIndex } from "./pick.js";
 export { coarsened, polygonsOf, rewound, shapesFromFeatures, shapesFromTopology, shapesOf, } from "./shapes.js";

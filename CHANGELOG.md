@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.6.0
+
+- **`createFocus` / `choose` / `up`** (`/map`): which place a map is about, as one pure state
+  machine (no canvas, no framework, no country). Choosing a place selects it, frames its **own
+  outline** (never a child's, never the bounds of whatever happens to be drawn inside it: a
+  country of which one province has boundaries is still framed as the whole country; only a place
+  with no outline of its own is framed by what is inside it), draws its children as the tappable
+  places with its own outline whole, and gives the places above it as faint context. Nothing
+  jumps to a child that was not chosen; `up()` is the same choice made on the parent. The tree is
+  three functions the app supplies (`cameraOf`, `childrenOf`, `parentOf`).
+- **`hatch(stripe, options)`**: a diagonal hatch fill for land more than one authority claims, so
+  colour is never the only carrier.
+
 ## 0.5.0
 
 - Labels that read like an atlas, not a wall of names:
